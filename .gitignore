@@ -48,6 +48,45 @@ coverage.xml
 *.cover
 *.py.cover
 .hypothesis/
+
+# ============================================================================
+# IMPORTANT: Environment & Secrets
+# ============================================================================
+.env
+.env.local
+.env.*.local
+secrets.json
+credentials.json
+*.key
+*.pem
+*.p8
+.env.production
+
+# ============================================================================
+# IDE
+# ============================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# ============================================================================
+# VRP Project Specific
+# ============================================================================
+vrp.db
+logs/
+uploads/
+downloads/
+.pytest_cache/
+*.log
+
+# Virtual environments
+venv/
+env/
+ENV/
 .pytest_cache/
 cover/
 
