@@ -1,43 +1,44 @@
-from app.utils.distance import euclidean_distance
-from app.models.route import Route
+def nearest_neighbor(distance_matrix):
 
-class NearestNeighbor:
+    n = len(distance_matrix)
 
-    def solve(self, points, depot):
+    visited = [False] * n
 
-        current = depot
-        unvisited = [p for p in points if p.id != depot.id]
+    route = []
 
-        route_path = [depot]
-        total_distance = 0
+    current = 0  # depot
 
-        while unvisited:
+    route.append(current)
 
-            nearest = None
-            min_dist = float("inf")
+    visited[current] = True
 
-            for point in unvisited:
+    total_distance = 0
 
-                dist = euclidean_distance(current, point)
+    for _ in range(n - 1):
 
-                if dist < min_dist:
-                    min_dist = dist
-                    nearest = point
+        nearest = None
+        nearest_dist = float("inf")
 
-            route_path.append(nearest)
-            total_distance += min_dist
-            unvisited.remove(nearest)
+        for i in range(n):
 
-            current = nearest
+            if not visited[i]:
 
-        # quay về depot
-        dist = euclidean_distance(current, depot)
-        route_path.append(depot)
-        total_distance += dist
+                dist = distance_matrix[current][i]
 
-        return Route(
-            vehicle_id="V1",
-            path=route_path,
-            distance=total_distance,
-            algorithm="nearest_neighbor"
-        )
+                if dist < nearest_dist:
+                    nearest = i
+                    nearest_dist = dist
+
+        route.append(nearest)
+
+        visited[nearest] = True
+
+        total_distance += nearest_dist
+
+        current = nearest
+
+    total_distance += distance_matrix[current][0]
+
+    route.append(0)
+
+    return route, total_distance

@@ -1,79 +1,121 @@
 import random
-from app.utils.distance import euclidean_distance
-from app.models.route import Route
 
 
-class GeneticAlgorithm:
+def create_individual(num_points):
 
-    def __init__(self, points, depot, population_size=50, generations=200):
+    individual = list(range(1, num_points))
 
-        self.points = points
-        self.depot = depot
-        self.population_size = population_size
-        self.generations = generations
+    random.shuffle(individual)
 
-    def solve(self):
+    return individual
+def initialize_population(pop_size, num_points):
 
-        customers = [p for p in self.points if p.id != self.depot.id]
+    population = []
 
-        population = []
+    for _ in range(pop_size):
 
-        # tạo quần thể ban đầu
-        for _ in range(self.population_size):
+        individual = create_individual(num_points)
 
-            route = customers.copy()
-            random.shuffle(route)
+        population.append(individual)
 
-            population.append(route)
+    return population
+def calculate_fitness(individual, distance_matrix):
 
-        best_route = None
-        best_distance = float("inf")
+    total_distance = 0
 
-        for _ in range(self.generations):
+    current = 0
 
-            new_population = []
+    for point in individual:
 
-            for route in population:
+        total_distance += distance_matrix[current][point]
 
-                distance = self.calculate_distance(route)
+        current = point
 
-                if distance < best_distance:
-                    best_distance = distance
-                    best_route = route.copy()
+    total_distance += distance_matrix[current][0]
 
-                child = self.mutate(route.copy())
+    fitness = 1 / total_distance
 
-                new_population.append(child)
+    return fitness, total_distance
+def selection(population, fitness_scores):
 
-            population = new_population
+    tournament_size = 3
 
-        final_path = [self.depot] + best_route + [self.depot]
+    selected = random.sample(list(zip(population, fitness_scores)), tournament_size)
 
-        return Route(
-            vehicle_id="V1",
-            path=final_path,
-            distance=best_distance,
-            algorithm="genetic_algorithm"
-        )
+    selected.sort(key=lambda x: x[1], reverse=True)
 
-    def calculate_distance(self, route):
+    return selected[0][0]
+def crossover(parent1, parent2):
 
-        total = 0
-        prev = self.depot
+    size = len(parent1)
 
-        for point in route:
+    start, end = sorted(random.sample(range(size), 2))
 
-            total += euclidean_distance(prev, point)
-            prev = point
+    child = [None] * size
 
-        total += euclidean_distance(prev, self.depot)
+    child[start:end] = parent1[start:end]
 
-        return total
+    pointer = 0
 
-    def mutate(self, route):
+    for gene in parent2:
 
-        i, j = random.sample(range(len(route)), 2)
+        if gene not in child:
 
-        route[i], route[j] = route[j], route[i]
+            while child[pointer] is not None:
+                pointer += 1
 
-        return route
+            child[pointer] = gene
+
+    return child
+def mutate(individual, mutation_rate=0.1):
+
+    if random.random() < mutation_rate:
+
+        i, j = random.sample(range(len(individual)), 2)
+
+        individual[i], individual[j] = individual[j], individual[i]
+
+    return individual
+def genetic_algorithm(distance_matrix, population_size=50, generations=200):
+
+    num_points = len(distance_matrix)
+
+    population = initialize_population(population_size, num_points)
+
+    best_solution = None
+    best_distance = float("inf")
+
+    for generation in range(generations):
+
+        fitness_scores = []
+
+        distances = []
+
+        for individual in population:
+
+            fitness, dist = calculate_fitness(individual, distance_matrix)
+
+            fitness_scores.append(fitness)
+
+            distances.append(dist)
+
+            if dist < best_distance:
+                best_distance = dist
+                best_solution = individual
+
+        new_population = []
+
+        for _ in range(population_size):
+
+            parent1 = selection(population, fitness_scores)
+            parent2 = selection(population, fitness_scores)
+
+            child = crossover(parent1, parent2)
+
+            child = mutate(child)
+
+            new_population.append(child)
+
+        population = new_population
+
+    return best_solution, best_distance
