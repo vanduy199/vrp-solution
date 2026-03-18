@@ -6,7 +6,8 @@ python-dotenv==1.0.0
 
 # Database
 sqlalchemy==2.0.23
-psycopg2-binary==2.9.9
+pymysql==1.1.1
+psycopg[binary]==3.2.10
 alembic==1.12.1
 
 # Caching & Queue

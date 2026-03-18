@@ -26,24 +26,16 @@ def haversine_distance(lat1, lon1, lat2, lon2):
 
     return R * c
 def build_distance_matrix(points):
-
     matrix = []
-
     for p1 in points:
-
         row = []
-
         for p2 in points:
-
             dist = haversine_distance(
                 p1.latitude,
                 p1.longitude,
                 p2.latitude,
                 p2.longitude
             )
-
             row.append(dist)
-
         matrix.append(row)
-
     return matrix
