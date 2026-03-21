@@ -13,7 +13,6 @@ def optimize_route(points):
 
 
 def optimize_ga(points):
-    from services.distance_service import build_distance_matrix
     distance_matrix = build_distance_matrix(points)
     route, distance = genetic_algorithm(distance_matrix)
     return {
