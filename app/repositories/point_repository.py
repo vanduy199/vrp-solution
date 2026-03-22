@@ -24,3 +24,16 @@ def delete_point(db: Session, point_id: str):
         db.delete(point)
         db.commit()
     return point
+
+# Việc get by id trước là không cần thiết, có thể update trực tiếp bằng cách query và update luôn, 
+# nhưng để giữ code đơn giản và dễ hiểu thì mình sẽ làm như này
+def update_point(db: Session, point_id: str, updated_data: dict):
+    point = get_point_by_id(db, point_id)
+    if point:
+        for key, value in updated_data.items():
+            setattr(point, key, value)
+        db.commit()
+        db.refresh(point)
+    return point
+
+
