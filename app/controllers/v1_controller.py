@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import io
+from types import SimpleNamespace
 from typing import Any, cast
 from uuid import uuid4
 
@@ -32,16 +33,10 @@ from app.models.route_detail import RouteDetail
 from app.models.optimization_job import OptimizationJob
 from app.models.active_route import ActiveRoute
 from app.models.driver_stop import DriverStop
+from app.models.depot import Depot
+from app.services.optimization_service import optimize_ga, optimize_route
 
 router = APIRouter(prefix="/v1")
-
-# In-memory stores for entities not yet backed by DB models.
-OPTIMIZATION_JOBS: dict[str, dict[str, Any]] = {}
-ACTIVE_ROUTES: dict[str, dict[str, Any]] = {}
-ROUTE_DETAILS: dict[str, dict[str, Any]] = {}
-DEPOTS: dict[str, dict[str, Any]] = {}
-USERS: dict[str, dict[str, Any]] = {}
-DRIVER_STOPS: dict[str, dict[str, Any]] = {}
 
 
 def _vehicle_to_response(vehicle: Vehicle) -> dict[str, Any]:
@@ -53,6 +48,12 @@ def _vehicle_to_response(vehicle: Vehicle) -> dict[str, Any]:
         "volume_m3": vehicle.volumn_m3 or 0,
         "cost_per_km": vehicle.cost_per_km or 0,
         "ev": bool(vehicle.ev),
+        "license_plate": vehicle.license_plate,
+        "cost_per_hour": vehicle.cost_per_hour,
+        "max_shift_hours": vehicle.max_shift_hours,
+        "depot_lat": vehicle.depot_lat,
+        "depot_lon": vehicle.depot_lon,
+        "driver_name": vehicle.driver_name,
     }
 
 
@@ -72,50 +73,271 @@ def _point_to_location_response(point: Point) -> dict[str, Any]:
     }
 
 
-def _materialize_job(job: dict[str, Any]) -> dict[str, Any]:
-    if job["status"] == "calculating" and datetime.now(timezone.utc) >= job["ready_at"]:
-        vehicle_ids = job["request"]["vehicles"]
-        location_ids = job["request"]["locations"]
+def _as_utc(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _materialize_db_job(job: OptimizationJob, db: Session) -> OptimizationJob:
+    ready_at = _as_utc(cast(datetime, getattr(job, "ready_at")))
+    status = cast(str, getattr(job, "status"))
+    if status == "calculating" and datetime.now(timezone.utc) >= ready_at:
+        vehicle_ids = cast(list[str], getattr(job, "vehicle_ids") or [])
+        location_ids = cast(list[str], getattr(job, "location_ids") or [])
+        job_id = cast(str, getattr(job, "job_id"))
+        project_id = cast(str, getattr(job, "project_id"))
+        objective = cast(str, getattr(job, "objective"))
+        solver_algorithm = cast(str, getattr(job, "solver_algorithm"))
+
+        if not vehicle_ids:
+            setattr(job, "status", "failed")
+            setattr(job, "result", {"error": "No vehicles provided"})
+            db.commit()
+            db.refresh(job)
+            return job
+
+        vehicles = db.query(Vehicle).filter(Vehicle.vehicle_id.in_(vehicle_ids)).all()
+        vehicle_map = {cast(str, vehicle.vehicle_id): vehicle for vehicle in vehicles}
+        missing_vehicle_ids = [vehicle_id for vehicle_id in vehicle_ids if vehicle_id not in vehicle_map]
+        if missing_vehicle_ids:
+            setattr(job, "status", "failed")
+            setattr(
+                job,
+                "result",
+                {
+                    "error": "Some vehicles were not found",
+                    "missing_vehicle_ids": missing_vehicle_ids,
+                },
+            )
+            db.commit()
+            db.refresh(job)
+            return job
+
+        points = db.query(Point).filter(Point.id.in_(location_ids)).all()
+        point_map = {cast(str, point.id): point for point in points}
+        missing_location_ids = [location_id for location_id in location_ids if location_id not in point_map]
+        if missing_location_ids:
+            setattr(job, "status", "failed")
+            setattr(
+                job,
+                "result",
+                {
+                    "error": "Some locations were not found",
+                    "missing_location_ids": missing_location_ids,
+                },
+            )
+            db.commit()
+            db.refresh(job)
+            return job
+
+        depots = db.query(Depot).all()
+        default_depot = depots[0] if depots else None
+
+        def _resolve_depot(vehicle_id: str, assigned_points: list[Point]) -> tuple[float, float, str]:
+            vehicle = vehicle_map.get(vehicle_id)
+            if vehicle is not None:
+                vehicle_depot_lat = getattr(vehicle, "depot_lat")
+                vehicle_depot_lon = getattr(vehicle, "depot_lon")
+                if vehicle_depot_lat is not None and vehicle_depot_lon is not None:
+                    return float(vehicle_depot_lat), float(vehicle_depot_lon), "vehicle"
+
+            if default_depot is not None:
+                depot_lat = getattr(default_depot, "lat")
+                depot_lng = getattr(default_depot, "lng")
+                return float(depot_lat), float(depot_lng), "global"
+
+            center_lat = sum(float(cast(Any, point).latitude) for point in assigned_points) / len(assigned_points)
+            center_lng = sum(float(cast(Any, point).longitude) for point in assigned_points) / len(assigned_points)
+            return float(center_lat), float(center_lng), "centroid"
+
+        ordered_vehicles = [vehicle_map[vehicle_id] for vehicle_id in vehicle_ids]
+        assigned_by_vehicle: dict[str, list[str]] = {vehicle_id: [] for vehicle_id in vehicle_ids}
+        vehicle_loads: dict[str, int] = {vehicle_id: 0 for vehicle_id in vehicle_ids}
+
+        capacity_by_vehicle: dict[str, int] = {}
+        for vehicle in ordered_vehicles:
+            vehicle_id = cast(str, vehicle.vehicle_id)
+            raw_capacity = getattr(vehicle, "capacity")
+            capacity_by_vehicle[vehicle_id] = int(raw_capacity or 0)
+
+        # Greedy assignment by demand so vehicle capacity is part of the optimization flow.
+        sorted_location_ids = sorted(
+            location_ids,
+            key=lambda location_id: (
+                int(getattr(point_map[location_id], "demand") or 0),
+                int(getattr(point_map[location_id], "priority") or 0),
+            ),
+            reverse=True,
+        )
+
+        forced_overload_assignments: list[dict[str, Any]] = []
+        for location_id in sorted_location_ids:
+            demand = int(getattr(point_map[location_id], "demand") or 0)
+
+            fitting_vehicle_ids = []
+            for vehicle_id in vehicle_ids:
+                vehicle_capacity = capacity_by_vehicle.get(vehicle_id, 0)
+                projected_load = vehicle_loads[vehicle_id] + demand
+                if vehicle_capacity <= 0 or projected_load <= vehicle_capacity:
+                    fitting_vehicle_ids.append(vehicle_id)
+
+            if fitting_vehicle_ids:
+                target_vehicle_id = min(
+                    fitting_vehicle_ids,
+                    key=lambda candidate_id: (
+                        vehicle_loads[candidate_id],
+                        -capacity_by_vehicle.get(candidate_id, 0),
+                    ),
+                )
+            else:
+                target_vehicle_id = min(vehicle_ids, key=lambda candidate_id: vehicle_loads[candidate_id])
+                forced_overload_assignments.append(
+                    {
+                        "location_id": location_id,
+                        "demand_kg": demand,
+                        "vehicle_id": target_vehicle_id,
+                        "capacity_kg": capacity_by_vehicle.get(target_vehicle_id, 0),
+                        "projected_load_kg": vehicle_loads[target_vehicle_id] + demand,
+                    }
+                )
+
+            assigned_by_vehicle[target_vehicle_id].append(location_id)
+            vehicle_loads[target_vehicle_id] += demand
+
+        def _solve_route(vehicle_id: str, assigned_ids: list[str]) -> tuple[list[str], float, dict[str, Any]]:
+            if not assigned_ids:
+                return [], 0.0, {"source": "none", "lat": None, "lng": None}
+
+            assigned_points = [point_map[location_id] for location_id in assigned_ids]
+            if len(assigned_points) == 1:
+                depot_lat, depot_lng, depot_source = _resolve_depot(vehicle_id, assigned_points)
+                return [cast(str, assigned_points[0].id)], 0.0, {
+                    "source": depot_source,
+                    "lat": round(depot_lat, 6),
+                    "lng": round(depot_lng, 6),
+                }
+
+            depot_lat, depot_lng, depot_source = _resolve_depot(vehicle_id, assigned_points)
+            depot = SimpleNamespace(id="__depot__", latitude=depot_lat, longitude=depot_lng)
+            solver_points = [depot, *assigned_points]
+
+            algorithm_key = solver_algorithm.strip().lower()
+            if algorithm_key in {"genetic_algorithm", "ga"}:
+                solver_output = optimize_ga(solver_points)
+            else:
+                solver_output = optimize_route(solver_points)
+
+            raw_route = cast(list[int], solver_output.get("route", []))
+            normalized_indices: list[int] = []
+            for point_index in raw_route:
+                if isinstance(point_index, int) and 1 <= point_index < len(solver_points):
+                    normalized_indices.append(point_index)
+
+            ordered_indices: list[int] = []
+            visited_indices: set[int] = set()
+            for point_index in normalized_indices:
+                if point_index not in visited_indices:
+                    visited_indices.add(point_index)
+                    ordered_indices.append(point_index)
+            for point_index in range(1, len(solver_points)):
+                if point_index not in visited_indices:
+                    ordered_indices.append(point_index)
+
+            ordered_stop_ids = [cast(str, solver_points[point_index].id) for point_index in ordered_indices]
+            route_distance = float(solver_output.get("total_distance", 0.0) or 0.0)
+            return ordered_stop_ids, route_distance, {
+                "source": depot_source,
+                "lat": round(depot_lat, 6),
+                "lng": round(depot_lng, 6),
+            }
 
         planned_routes: list[dict[str, Any]] = []
+        total_distance_km = 0.0
         for index, vehicle_id in enumerate(vehicle_ids):
-            assigned_stops = location_ids[index:: max(len(vehicle_ids), 1)]
+            assigned_location_ids = assigned_by_vehicle.get(vehicle_id, [])
+            ordered_stops, route_distance_km, depot_info = _solve_route(vehicle_id, assigned_location_ids)
+            route_duration_minutes = round((route_distance_km / 35.0) * 60 + len(ordered_stops) * 10, 2)
+            vehicle_capacity = capacity_by_vehicle.get(vehicle_id, 0)
+            vehicle_load = vehicle_loads.get(vehicle_id, 0)
+            utilization_pct = 0.0
+            if vehicle_capacity > 0:
+                utilization_pct = round((vehicle_load / vehicle_capacity) * 100, 2)
+
+            total_distance_km += route_distance_km
             planned_routes.append(
                 {
-                    "route_id": f"route-{job['job_id']}-{index + 1}",
+                    "route_id": f"route-{job_id}-{index + 1}",
                     "vehicle_id": vehicle_id,
-                    "stops": assigned_stops,
-                    "stop_count": len(assigned_stops),
+                    "stops": ordered_stops,
+                    "stop_count": len(ordered_stops),
+                    "load_kg": vehicle_load,
+                    "capacity_kg": vehicle_capacity,
+                    "utilization_pct": utilization_pct,
+                    "depot": depot_info,
+                    "distance_km": round(route_distance_km, 2),
+                    "duration_minutes": route_duration_minutes,
                 }
             )
 
-        job["status"] = "completed"
-        job["result"] = {
-            "project_id": job["request"]["project_id"],
-            "objective": job["request"]["objective"],
-            "solver_algorithm": job["request"]["solver_algorithm"],
-            "total_distance_km": round(len(location_ids) * 2.35, 2),
-            "total_duration_minutes": len(location_ids) * 18,
-            "routes": planned_routes,
-        }
+        total_duration_minutes = round((total_distance_km / 35.0) * 60 + len(location_ids) * 10, 2)
 
+        now_utc = datetime.now(timezone.utc)
         for planned_route in planned_routes:
-            route_id = planned_route["route_id"]
-            if route_id not in ROUTE_DETAILS:
-                ROUTE_DETAILS[route_id] = {
-                    "route_id": route_id,
-                    "vehicle_id": planned_route["vehicle_id"],
-                    "status": "planned",
-                    "stops": planned_route["stops"],
-                    "metrics": {
-                        "total_distance_km": round(max(planned_route["stop_count"], 1) * 2.2, 2),
-                        "total_duration_minutes": planned_route["stop_count"] * 20,
-                        "stop_count": planned_route["stop_count"],
-                        "completed_stops": 0,
-                    },
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                }
+            route_id = cast(str, planned_route["route_id"])
+            vehicle_id = cast(str, planned_route["vehicle_id"])
+            distance_km = float(planned_route["distance_km"])
+            duration_minutes = float(planned_route["duration_minutes"])
+            stop_count = int(planned_route["stop_count"])
+            stops = cast(list[str], planned_route["stops"])
+
+            vehicle_record = vehicle_map.get(vehicle_id)
+            cost_per_km = 0.0
+            if vehicle_record is not None:
+                cost_per_km = float(getattr(vehicle_record, "cost_per_km") or 0.0)
+
+            route_record = db.query(Route).filter(Route.route_id == route_id).first()
+            if route_record is None:
+                route_record = Route(route_id=route_id)
+                db.add(route_record)
+
+            setattr(route_record, "vehicle_id", vehicle_id)
+            setattr(route_record, "total_distance", distance_km)
+            setattr(route_record, "total_duration", duration_minutes)
+            setattr(route_record, "total_cost", round(distance_km * cost_per_km, 2))
+
+            route_detail_record = db.query(RouteDetail).filter(RouteDetail.route_id == route_id).first()
+            if route_detail_record is None:
+                route_detail_record = RouteDetail(route_id=route_id)
+                db.add(route_detail_record)
+                setattr(route_detail_record, "created_at", now_utc)
+
+            setattr(route_detail_record, "vehicle_id", vehicle_id)
+            setattr(route_detail_record, "status", "planned")
+            setattr(route_detail_record, "stops", stops)
+            setattr(route_detail_record, "total_distance_km", distance_km)
+            setattr(route_detail_record, "total_duration_minutes", duration_minutes)
+            setattr(route_detail_record, "stop_count", stop_count)
+            setattr(route_detail_record, "completed_stops", 0)
+            setattr(route_detail_record, "updated_at", now_utc)
+
+        setattr(job, "status", "completed")
+        setattr(
+            job,
+            "result",
+            {
+                "project_id": project_id,
+                "objective": objective,
+                "solver_algorithm": solver_algorithm,
+                "total_distance_km": round(total_distance_km, 2),
+                "total_duration_minutes": total_duration_minutes,
+                "forced_overload_assignments": forced_overload_assignments,
+                "routes": planned_routes,
+            },
+        )
+        db.commit()
+        db.refresh(job)
+
     return job
 
 
@@ -133,13 +355,12 @@ def _to_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
-def _serialize_job(job: dict[str, Any]) -> dict[str, Any]:
-    materialized = _materialize_job(job)
+def _serialize_db_job(job: OptimizationJob) -> dict[str, Any]:
     return {
-        "job_id": materialized["job_id"],
-        "status": materialized["status"],
-        "created_at": materialized["created_at"].isoformat(),
-        "estimated_time_seconds": materialized["estimated_time_seconds"],
+        "job_id": cast(str, getattr(job, "job_id")),
+        "status": cast(str, getattr(job, "status")),
+        "created_at": _as_utc(cast(datetime, getattr(job, "created_at"))).isoformat(),
+        "estimated_time_seconds": cast(float, getattr(job, "estimated_time_seconds")),
     }
 
 
@@ -154,31 +375,52 @@ def _route_summary(route_detail: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _route_detail_model_to_dict(route_detail: RouteDetail) -> dict[str, Any]:
+    return {
+        "route_id": cast(str, route_detail.route_id),
+        "vehicle_id": cast(str, route_detail.vehicle_id),
+        "status": cast(str, route_detail.status),
+        "stops": cast(list[str], route_detail.stops or []),
+        "metrics": {
+            "total_distance_km": float(getattr(route_detail, "total_distance_km") or 0.0),
+            "total_duration_minutes": float(getattr(route_detail, "total_duration_minutes") or 0.0),
+            "stop_count": int(getattr(route_detail, "stop_count") or 0),
+            "completed_stops": int(getattr(route_detail, "completed_stops") or 0),
+        },
+        "created_at": _as_utc(cast(datetime, route_detail.created_at)).isoformat(),
+        "updated_at": _as_utc(cast(datetime, route_detail.updated_at)).isoformat(),
+    }
+
+
 def _normalize_route_detail(route_id: str, db: Session) -> dict[str, Any]:
-    route_detail = ROUTE_DETAILS.get(route_id)
-    if route_detail:
-        return route_detail
+    route_detail_record = db.query(RouteDetail).filter(RouteDetail.route_id == route_id).first()
+    if route_detail_record:
+        return _route_detail_model_to_dict(route_detail_record)
 
     route = db.query(Route).filter(Route.route_id == route_id).first()
     if not route:
         raise HTTPException(status_code=404, detail="Route not found")
 
-    generated = {
-        "route_id": route.route_id,
-        "vehicle_id": route.vehicle_id,
-        "status": "active" if route_id in ACTIVE_ROUTES else "planned",
-        "stops": [],
-        "metrics": {
-            "total_distance_km": _to_float(getattr(route, "total_distance", 0.0)),
-            "total_duration_minutes": _to_float(getattr(route, "total_duration", 0.0)),
-            "stop_count": 0,
-            "completed_stops": 0,
-        },
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }
-    ROUTE_DETAILS[route_id] = generated
-    return generated
+    active_route = db.query(ActiveRoute).filter(ActiveRoute.route_id == route_id).first()
+    generated_status = "active" if active_route else "planned"
+    now_utc = datetime.now(timezone.utc)
+
+    generated_record = RouteDetail(
+        route_id=cast(str, route.route_id),
+        vehicle_id=cast(str, route.vehicle_id),
+        status=generated_status,
+        stops=[],
+        total_distance_km=_to_float(getattr(route, "total_distance", 0.0)),
+        total_duration_minutes=_to_float(getattr(route, "total_duration", 0.0)),
+        stop_count=0,
+        completed_stops=0,
+        created_at=now_utc,
+        updated_at=now_utc,
+    )
+    db.add(generated_record)
+    db.commit()
+    db.refresh(generated_record)
+    return _route_detail_model_to_dict(generated_record)
 
 
 def _vehicle_or_404(vehicle_id: str, db: Session) -> Vehicle:
@@ -282,12 +524,12 @@ def delete_fleet_vehicle(vehicle_id: str, db: Session = Depends(get_db)):
     vehicle = _vehicle_or_404(vehicle_id, db)
     
     # Check if vehicle is used in any active routes
-    for active_route in ACTIVE_ROUTES.values():
-        if active_route.get("vehicle_id") == vehicle_id:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Cannot delete vehicle {vehicle_id}: it has active routes"
-            )
+    active_route_record = db.query(ActiveRoute).filter(ActiveRoute.vehicle_id == vehicle_id).first()
+    if active_route_record:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot delete vehicle {vehicle_id}: it has active routes"
+        )
     
     # Also check in database route details
     route_details_in_db = db.query(RouteDetail).filter(
@@ -404,15 +646,8 @@ def update_location(location_id: str, payload: LocationUpdateDTO, db: Session = 
 @router.delete("/locations/{location_id}")
 def delete_location(location_id: str, db: Session = Depends(get_db)):
     point = _point_or_404(location_id, db)
-    
-    # Check if location is used in any route details (from in-memory ROUTE_DETAILS)
-    for route_detail in ROUTE_DETAILS.values():
-        if location_id in route_detail.get("stops", []):
-            raise HTTPException(
-                status_code=409,
-                detail=f"Cannot delete location {location_id}: it is used in active routes"
-            )
-    
+
+    # Check database route details to avoid deleting locations used by existing routes.
     # Also check in database route details if they exist
     route_details_in_db = db.query(RouteDetail).all()
     for route_detail in route_details_in_db:
@@ -432,20 +667,29 @@ def delete_location(location_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/optimize/run")
-def run_optimizer(payload: OptimizeRunRequestDTO):
+def run_optimizer(payload: OptimizeRunRequestDTO, db: Session = Depends(get_db)):
     job_id = f"job-{uuid4().hex[:8]}"
     estimated_time = max(1.5, min(30.0, len(payload.locations) * 0.5))
+    created_at = datetime.now(timezone.utc)
+    ready_at = created_at + timedelta(seconds=estimated_time)
 
-    job_data = {
-        "job_id": job_id,
-        "status": "calculating",
-        "request": payload.model_dump(),
-        "created_at": datetime.now(timezone.utc),
-        "ready_at": datetime.now(timezone.utc) + timedelta(seconds=estimated_time),
-        "estimated_time_seconds": estimated_time,
-        "result": None,
-    }
-    OPTIMIZATION_JOBS[job_id] = job_data
+    job = OptimizationJob(
+        job_id=job_id,
+        status="calculating",
+        project_id=payload.project_id,
+        solver_algorithm=payload.solver_algorithm,
+        objective=payload.objective,
+        vehicle_ids=payload.vehicles,
+        location_ids=payload.locations,
+        constraints=payload.constraints,
+        estimated_time_seconds=estimated_time,
+        created_at=created_at,
+        ready_at=ready_at,
+        result=None,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
 
     return {
         "job_id": job_id,
@@ -455,45 +699,48 @@ def run_optimizer(payload: OptimizeRunRequestDTO):
 
 
 @router.get("/optimize/job/{job_id}")
-def get_optimizer_job(job_id: str):
-    job = OPTIMIZATION_JOBS.get(job_id)
-    if not job:
+def get_optimizer_job(job_id: str, db: Session = Depends(get_db)):
+    db_job = db.query(OptimizationJob).filter(OptimizationJob.job_id == job_id).first()
+    if not db_job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    materialized = _materialize_job(job)
+    materialized = _materialize_db_job(db_job, db)
+    materialized_status = cast(str, getattr(materialized, "status"))
     response = {
-        "job_id": materialized["job_id"],
-        "status": materialized["status"],
+        "job_id": cast(str, getattr(materialized, "job_id")),
+        "status": materialized_status,
     }
-    if materialized["status"] == "completed":
-        response["result"] = materialized["result"]
+    if materialized_status in {"completed", "failed"}:
+        response["result"] = getattr(materialized, "result")
     return response
 
 
 @router.get("/optimize/jobs")
-def get_optimizer_jobs():
-    jobs = [_serialize_job(job) for job in OPTIMIZATION_JOBS.values()]
+def get_optimizer_jobs(db: Session = Depends(get_db)):
+    db_jobs = db.query(OptimizationJob).all()
+    for db_job in db_jobs:
+        _materialize_db_job(db_job, db)
+
+    jobs = [_serialize_db_job(db_job) for db_job in db_jobs]
+
     return sorted(jobs, key=lambda item: item["created_at"], reverse=True)
 
 
 @router.post("/optimize/job/{job_id}/cancel")
-def cancel_optimizer_job(job_id: str):
-    job = OPTIMIZATION_JOBS.get(job_id)
-    if not job:
+def cancel_optimizer_job(job_id: str, db: Session = Depends(get_db)):
+    db_job = db.query(OptimizationJob).filter(OptimizationJob.job_id == job_id).first()
+    if not db_job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    # Check current status without materializing (to avoid side effects)
-    current_status = job.get("status")
-    
-    if current_status == "completed":
+    db_status = cast(str, getattr(db_job, "status"))
+    if db_status == "completed":
         raise HTTPException(status_code=409, detail="Completed job cannot be cancelled")
-    
-    if current_status == "cancelled":
+    if db_status == "cancelled":
         raise HTTPException(status_code=409, detail="Job is already cancelled")
-    
-    # Update job status directly - atomic operation
-    job["status"] = "cancelled"
-    
+
+    setattr(db_job, "status", "cancelled")
+    db.commit()
+
     return {
         "success": True,
         "job_id": job_id,
@@ -502,27 +749,21 @@ def cancel_optimizer_job(job_id: str):
 
 
 @router.get("/optimize/job/{job_id}/result")
-def get_optimizer_job_result(job_id: str):
-    job = OPTIMIZATION_JOBS.get(job_id)
-    if not job:
+def get_optimizer_job_result(job_id: str, db: Session = Depends(get_db)):
+    db_job = db.query(OptimizationJob).filter(OptimizationJob.job_id == job_id).first()
+    if not db_job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    materialized = _materialize_job(job)
-    if materialized["status"] != "completed":
+    materialized = _materialize_db_job(db_job, db)
+    materialized_status = cast(str, getattr(materialized, "status"))
+    if materialized_status != "completed":
         raise HTTPException(status_code=409, detail="Job result is not available yet")
-
-    return materialized["result"]
+    return getattr(materialized, "result")
 
 
 @router.get("/routes/active")
 def get_active_routes(db: Session = Depends(get_db)):
-    # First try to get from in-memory cache
-    if ACTIVE_ROUTES:
-        return list(ACTIVE_ROUTES.values())
-
-    # If no in-memory routes, try querying database active_routes table
-    from app.repositories.active_route_repository import get_all_active_routes as get_db_active_routes
-    db_active_routes = get_db_active_routes(db)
+    db_active_routes = db.query(ActiveRoute).all()
     
     result = []
     for route in db_active_routes:
@@ -546,40 +787,18 @@ def get_active_routes(db: Session = Depends(get_db)):
             "delay_mins": route.delay_mins,
         })
     
-    # If still no routes found, return empty array with proper format
-    if not result:
-        # Optionally try Route table as fallback
-        routes = db.query(Route).all()
-        if routes:
-            return [{
-                "route_id": route.route_id,
-                "vehicle_id": route.vehicle_id,
-                "driver_name": "Unknown",
-                "status": "on-time",
-                "progress_percentage": 0,
-                "current_coordinates": {"lat": 0.0, "lng": 0.0},
-                "next_stop": {
-                    "location_id": None,
-                    "name": None,
-                    "eta": None,
-                    "stop_index": 0,
-                    "total_stops": 0,
-                },
-                "delay_mins": 0,
-            } for route in routes]
-    
     return result
 
 
 @router.get("/routes")
 def list_routes(db: Session = Depends(get_db)):
-    for job in OPTIMIZATION_JOBS.values():
-        _materialize_job(job)
+    for db_job in db.query(OptimizationJob).all():
+        _materialize_db_job(db_job, db)
 
     summaries: dict[str, dict[str, Any]] = {}
 
-    for route_detail in ROUTE_DETAILS.values():
-        summaries[route_detail["route_id"]] = _route_summary(route_detail)
+    for route_detail in db.query(RouteDetail).all():
+        summaries[cast(str, route_detail.route_id)] = _route_summary(_route_detail_model_to_dict(route_detail))
 
     for route in db.query(Route).all():
         route_id = str(getattr(route, "route_id"))
@@ -593,7 +812,8 @@ def list_routes(db: Session = Depends(get_db)):
 @router.get("/routes/{route_id}")
 def get_route_detail(route_id: str, db: Session = Depends(get_db)):
     route_detail = _normalize_route_detail(route_id, db)
-    if route_id in ACTIVE_ROUTES:
+    active_route = db.query(ActiveRoute).filter(ActiveRoute.route_id == route_id).first()
+    if active_route:
         route_detail["status"] = "active"
 
     return route_detail
@@ -607,13 +827,14 @@ def get_route_manifest(route_id: str, db: Session = Depends(get_db)):
     stops_payload: list[dict[str, Any]] = []
     for index, stop_id in enumerate(route_detail["stops"]):
         point = db.query(Point).filter(Point.id == stop_id).first()
+        driver_stop = db.query(DriverStop).filter(DriverStop.stop_id == stop_id).first()
         stops_payload.append(
             {
                 "stop_id": stop_id,
                 "name": point.name if point else "Unknown",
                 "address": point.address if point else "",
                 "sequence": index + 1,
-                "status": DRIVER_STOPS.get(stop_id, {}).get("status", "pending"),
+                "status": driver_stop.status if driver_stop else "pending",
             }
         )
 
@@ -653,11 +874,34 @@ def dispatch_route(route_id: str, db: Session = Depends(get_db)):
         },
         "delay_mins": 0,
     }
-    ACTIVE_ROUTES[route_id] = active_record
+    active_route = db.query(ActiveRoute).filter(ActiveRoute.route_id == route_id).first()
+    if active_route is None:
+        active_route = ActiveRoute(route_id=cast(str, route.route_id))
+        db.add(active_route)
+
+    setattr(active_route, "vehicle_id", cast(str, route.vehicle_id))
+    setattr(active_route, "driver_name", active_record["driver_name"])
+    setattr(active_route, "status", active_record["status"])
+    setattr(active_route, "progress_percentage", active_record["progress_percentage"])
+    setattr(active_route, "current_lat", active_record["current_coordinates"]["lat"])
+    setattr(active_route, "current_lng", active_record["current_coordinates"]["lng"])
+    setattr(active_route, "next_location_id", active_record["next_stop"]["location_id"])
+    setattr(active_route, "next_location_name", active_record["next_stop"]["name"])
+    setattr(active_route, "next_eta", active_record["next_stop"]["eta"])
+    setattr(active_route, "next_stop_index", active_record["next_stop"]["stop_index"])
+    setattr(active_route, "total_stops", active_record["next_stop"]["total_stops"])
+    setattr(active_route, "delay_mins", active_record["delay_mins"])
 
     route_detail = _normalize_route_detail(route_id, db)
     route_detail["status"] = "active"
     route_detail["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    route_detail_record = db.query(RouteDetail).filter(RouteDetail.route_id == route_id).first()
+    if route_detail_record:
+        setattr(route_detail_record, "status", "active")
+        setattr(route_detail_record, "updated_at", datetime.now(timezone.utc))
+
+    db.commit()
 
     return {
         "success": True,
@@ -673,14 +917,45 @@ def complete_route(route_id: str, db: Session = Depends(get_db)):
     route_detail["metrics"]["completed_stops"] = route_detail["metrics"]["stop_count"]
     route_detail["updated_at"] = datetime.now(timezone.utc).isoformat()
 
-    if route_id in ACTIVE_ROUTES:
-        del ACTIVE_ROUTES[route_id]
+    active_route = db.query(ActiveRoute).filter(ActiveRoute.route_id == route_id).first()
+    if active_route:
+        db.delete(active_route)
+
+    route_detail_record = db.query(RouteDetail).filter(RouteDetail.route_id == route_id).first()
+    if route_detail_record:
+        setattr(route_detail_record, "status", "completed")
+        setattr(route_detail_record, "completed_stops", int(route_detail["metrics"]["stop_count"]))
+        setattr(route_detail_record, "updated_at", datetime.now(timezone.utc))
+
+    db.commit()
 
     return {
         "success": True,
         "route_id": route_id,
         "status": route_detail["status"],
     }
+
+
+
+@router.delete("/routes/{route_id}")
+def delete_route(route_id: str, db: Session = Depends(get_db)):
+    route = db.query(Route).filter(Route.route_id == route_id).first()
+    if not route:
+        raise HTTPException(status_code=404, detail="Route not found")
+
+    active_route = db.query(ActiveRoute).filter(ActiveRoute.route_id == route_id).first()
+    if active_route:
+        db.delete(active_route)
+
+    route_detail = db.query(RouteDetail).filter(RouteDetail.route_id == route_id).first()
+    if route_detail:
+        db.delete(route_detail)
+
+    # Remove from DB
+    db.delete(route)
+    db.commit()
+
+    return {"success": True, "message": f"Route {route_id} deleted"}
 
 
 @router.post("/routes/{route_id}/status")
@@ -692,8 +967,18 @@ def update_route_status(route_id: str, payload: RouteStatusUpdateDTO, db: Sessio
     if payload.note:
         route_detail["status_note"] = payload.note
 
-    if payload.status == "completed" and route_id in ACTIVE_ROUTES:
-        del ACTIVE_ROUTES[route_id]
+    route_detail_record = db.query(RouteDetail).filter(RouteDetail.route_id == route_id).first()
+    if route_detail_record:
+        setattr(route_detail_record, "status", payload.status)
+        setattr(route_detail_record, "status_note", payload.note)
+        setattr(route_detail_record, "updated_at", datetime.now(timezone.utc))
+
+    if payload.status == "completed":
+        active_route = db.query(ActiveRoute).filter(ActiveRoute.route_id == route_id).first()
+        if active_route:
+            db.delete(active_route)
+
+    db.commit()
 
     return {
         "success": True,
@@ -706,7 +991,7 @@ def get_dashboard_metrics(db: Session = Depends(get_db)):
     routes = db.query(Route).all()
     vehicles = db.query(Vehicle).all()
 
-    total_active = len(ACTIVE_ROUTES)
+    total_active = db.query(ActiveRoute).count()
     utilization = 0.0
     if vehicles:
         utilization = round((total_active / len(vehicles)) * 100, 2)
@@ -1046,7 +1331,7 @@ async def upload_manifest(file: UploadFile = File(...), db: Session = Depends(ge
 
 
 @router.post("/routes/{route_id}/adjust")
-def adjust_route(route_id: str, payload: RouteAdjustDTO):
+def adjust_route(route_id: str, payload: RouteAdjustDTO, db: Session = Depends(get_db)):
     adjustment = {
         "route_id": route_id,
         "stop_id": payload.stop_id,
@@ -1056,9 +1341,11 @@ def adjust_route(route_id: str, payload: RouteAdjustDTO):
         "locked": True,
     }
 
-    target_route = ACTIVE_ROUTES.get(payload.target_route_id)
+    target_route = db.query(ActiveRoute).filter(ActiveRoute.route_id == payload.target_route_id).first()
     if target_route:
-        target_route["next_stop"]["location_id"] = payload.stop_id
+        setattr(target_route, "next_location_id", payload.stop_id)
+        setattr(target_route, "next_location_name", payload.stop_id)
+        db.commit()
 
     return {
         "success": True,
@@ -1068,19 +1355,20 @@ def adjust_route(route_id: str, payload: RouteAdjustDTO):
 
 
 @router.get("/driver/manifest")
-def get_driver_manifest():
+def get_driver_manifest(db: Session = Depends(get_db)):
     manifests: list[dict[str, Any]] = []
-    for route in ACTIVE_ROUTES.values():
+    active_routes = db.query(ActiveRoute).all()
+    for route in active_routes:
         manifests.append(
             {
-                "route_id": route["route_id"],
-                "vehicle_id": route["vehicle_id"],
-                "driver_name": route["driver_name"],
+                "route_id": route.route_id,
+                "vehicle_id": route.vehicle_id,
+                "driver_name": route.driver_name,
                 "stops": [
                     {
-                        "stop_id": route["next_stop"]["location_id"],
-                        "name": route["next_stop"]["name"],
-                        "eta": route["next_stop"]["eta"],
+                        "stop_id": route.next_location_id,
+                        "name": route.next_location_name,
+                        "eta": route.next_eta,
                         "status": "pending",
                     }
                 ],
@@ -1106,7 +1394,8 @@ def get_driver_route_stops(route_id: str, db: Session = Depends(get_db)):
     stops = []
     for stop_id in route_detail["stops"]:
         point = db.query(Point).filter(Point.id == stop_id).first()
-        stop_status = DRIVER_STOPS.get(stop_id, {}).get("status", "pending")
+        driver_stop = db.query(DriverStop).filter(DriverStop.stop_id == stop_id).first()
+        stop_status = driver_stop.status if driver_stop else "pending"
         stops.append(
             {
                 "stop_id": stop_id,
@@ -1121,23 +1410,40 @@ def get_driver_route_stops(route_id: str, db: Session = Depends(get_db)):
 
 
 @router.put("/driver/stops/{stop_id}/status")
-def update_driver_stop_status(stop_id: str, payload: DriverStopStatusUpdateDTO):
-    DRIVER_STOPS[stop_id] = {
-        "stop_id": stop_id,
-        "status": payload.status,
-        "proof_of_delivery_url": payload.proof_of_delivery_url,
-        "notes": payload.notes,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }
+def update_driver_stop_status(stop_id: str, payload: DriverStopStatusUpdateDTO, db: Session = Depends(get_db)):
+    stop = db.query(DriverStop).filter(DriverStop.stop_id == stop_id).first()
+    if stop is None:
+        stop = DriverStop(stop_id=stop_id, status=payload.status)
+        db.add(stop)
+
+    setattr(stop, "status", payload.status)
+    setattr(stop, "proof_of_delivery_url", payload.proof_of_delivery_url)
+    setattr(stop, "notes", payload.notes)
+    setattr(stop, "updated_at", datetime.now(timezone.utc))
+    db.commit()
+    db.refresh(stop)
+
     return {
         "success": True,
-        "data": DRIVER_STOPS[stop_id],
+        "data": {
+            "stop_id": stop.stop_id,
+            "status": stop.status,
+            "proof_of_delivery_url": stop.proof_of_delivery_url,
+            "notes": stop.notes,
+            "updated_at": _as_utc(cast(datetime, stop.updated_at)).isoformat(),
+        },
     }
 
 
 @router.get("/driver/stops/{stop_id}")
-def get_driver_stop_status(stop_id: str):
-    stop = DRIVER_STOPS.get(stop_id)
+def get_driver_stop_status(stop_id: str, db: Session = Depends(get_db)):
+    stop = db.query(DriverStop).filter(DriverStop.stop_id == stop_id).first()
     if not stop:
         raise HTTPException(status_code=404, detail="Driver stop not found")
-    return stop
+    return {
+        "stop_id": stop.stop_id,
+        "status": stop.status,
+        "proof_of_delivery_url": stop.proof_of_delivery_url,
+        "notes": stop.notes,
+        "updated_at": _as_utc(cast(datetime, stop.updated_at)).isoformat(),
+    }
