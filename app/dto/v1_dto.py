@@ -55,3 +55,63 @@ class VehicleCreateDTO(BaseModel):
     depot_lat: float | None = None
     depot_lon: float | None = None
     driver_name: str | None = None
+
+
+class VehicleUpdateDTO(BaseModel):
+    name: str | None = None
+    status: str | None = None
+    capacity_kg: int | None = None
+    volume_m3: float | None = None
+    cost_per_km: float | None = None
+    ev: bool | None = None
+    license_plate: str | None = None
+    cost_per_hour: float | None = None
+    max_shift_hours: int | None = None
+    depot_lat: float | None = None
+    depot_lon: float | None = None
+    driver_name: str | None = None
+
+
+class LocationCreateDTO(BaseModel):
+    id: str | None = None
+    name: str
+    address_string: str = ""
+    lat: float
+    lng: float
+    demand_kg: int = 0
+    priority: int = 0
+    phone: str = ""
+    time_window_start: str = ""
+    time_window_end: str = ""
+    service_time_mins: int = 0
+
+
+class LocationUpdateDTO(BaseModel):
+    name: str | None = None
+    address_string: str | None = None
+    lat: float | None = None
+    lng: float | None = None
+    demand_kg: int | None = None
+    priority: int | None = None
+    phone: str | None = None
+    time_window_start: str | None = None
+    time_window_end: str | None = None
+    service_time_mins: int | None = None
+
+
+class UserUpdateDTO(BaseModel):
+    full_name: str | None = None
+    role: str | None = None
+    phone: str | None = None
+    email: str | None = None
+
+
+class DepotUpdateDTO(BaseModel):
+    name: str | None = None
+    coordinates: DepotCoordinatesDTO | None = None
+    operating_windows: list[str] | None = None
+
+
+class RouteStatusUpdateDTO(BaseModel):
+    status: str
+    note: str | None = None

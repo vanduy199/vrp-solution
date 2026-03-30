@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database.connection import get_db
@@ -42,6 +42,14 @@ def get_points(db: Session = Depends(get_db)):
 
 @router.post("/points")
 def create_point_api(payload: PointCreateDTO, db: Session = Depends(get_db)):
+    from app.utils.validators import validate_location_input
+    
+    # Validate input
+    try:
+        validate_location_input(payload.name, payload.latitude, payload.longitude, payload.demand)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
     point = create_point(db, payload.model_dump())
     return {
         "success": True,
