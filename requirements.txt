@@ -12,6 +12,7 @@ alembic==1.12.1
 
 # Caching & Queue
 redis==5.0.1
+kafka-python-ng==2.2.3
 python-multipart==0.0.6
 
 # Google Maps API

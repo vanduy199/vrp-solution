@@ -855,6 +855,19 @@ def dispatch_route(route_id: str, db: Session = Depends(get_db)):
 
     vehicle = db.query(Vehicle).filter(Vehicle.vehicle_id == route.vehicle_id).first()
 
+    # Read actual stop data from route detail
+    route_detail = _normalize_route_detail(route_id, db)
+    stops_list = route_detail.get("stops", [])
+    total_stops = len(stops_list)
+
+    # Resolve first stop name
+    first_stop_id = stops_list[0] if stops_list else None
+    first_stop_name = "Start route"
+    if first_stop_id:
+        first_point = db.query(Point).filter(Point.id == first_stop_id).first()
+        if first_point:
+            first_stop_name = first_point.name or first_stop_id
+
     active_record = {
         "route_id": route.route_id,
         "vehicle_id": route.vehicle_id,
@@ -866,11 +879,11 @@ def dispatch_route(route_id: str, db: Session = Depends(get_db)):
             "lng": vehicle.depot_lon if vehicle and vehicle.depot_lon is not None else 0.0,
         },
         "next_stop": {
-            "location_id": None,
-            "name": "Start route",
+            "location_id": first_stop_id,
+            "name": first_stop_name,
             "eta": None,
-            "stop_index": 0,
-            "total_stops": 0,
+            "stop_index": 1 if total_stops > 0 else 0,
+            "total_stops": total_stops,
         },
         "delay_mins": 0,
     }
@@ -892,7 +905,6 @@ def dispatch_route(route_id: str, db: Session = Depends(get_db)):
     setattr(active_route, "total_stops", active_record["next_stop"]["total_stops"])
     setattr(active_route, "delay_mins", active_record["delay_mins"])
 
-    route_detail = _normalize_route_detail(route_id, db)
     route_detail["status"] = "active"
     route_detail["updated_at"] = datetime.now(timezone.utc).isoformat()
 
@@ -992,9 +1004,16 @@ def get_dashboard_metrics(db: Session = Depends(get_db)):
     vehicles = db.query(Vehicle).all()
 
     total_active = db.query(ActiveRoute).count()
+
+    # Utilization = distinct vehicles that have at least one active route / total vehicles
     utilization = 0.0
     if vehicles:
-        utilization = round((total_active / len(vehicles)) * 100, 2)
+        active_vehicle_ids = {
+            cast(str, ar.vehicle_id)
+            for ar in db.query(ActiveRoute).all()
+        }
+        vehicles_in_use = len(active_vehicle_ids)
+        utilization = round(min((vehicles_in_use / len(vehicles)) * 100, 100.0), 2)
 
     distance_values = [getattr(route, "total_distance", 0) for route in routes]
     total_distance = round(sum(float(value or 0) for value in distance_values), 2)
@@ -1003,6 +1022,8 @@ def get_dashboard_metrics(db: Session = Depends(get_db)):
 
     return {
         "total_active_routes": total_active,
+        "total_vehicles": len(vehicles),
+        "vehicles_in_use": vehicles_in_use if vehicles else 0,
         "vehicle_utilization_pct": utilization,
         "total_distance_km": total_distance,
         "cost_savings_usd": cost_savings,
