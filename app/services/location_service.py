@@ -18,7 +18,7 @@ def create_location(db: Session, payload: LocationCreate) -> Location:
     location = Location(
         id=loc_id,
         name=payload.name,
-        address=payload.address,
+        address=payload.address or payload.address_string,
         lat=payload.coordinates.lat,
         lng=payload.coordinates.lng,
         demand_kg=payload.demand_kg,

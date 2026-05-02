@@ -15,4 +15,5 @@ class User(Base, TimestampMixin):
     phone = Column(String)
     password_hash = Column(String)
 
-    vehicles = relationship("Vehicle", back_populates="driver")
+    managed_drivers = relationship("Driver", back_populates="admin")
+    depot_assignments = relationship("UserDepot", back_populates="user", cascade="all, delete-orphan")

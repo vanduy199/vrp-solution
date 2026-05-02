@@ -24,6 +24,10 @@ class Settings:
 
     GOOGLE_MAPS_API_KEY: str = os.getenv("GOOGLE_MAPS_API_KEY", "")
 
+    MAP_PROVIDER: str = os.getenv("MAP_PROVIDER", "locationiq")
+    LOCATIONIQ_API_KEY: str = os.getenv("LOCATIONIQ_API_KEY", "")
+    GOONG_API_KEY: str = os.getenv("GOONG_API_KEY", "")
+
     JWT_SECRET: str = os.getenv("JWT_SECRET_KEY", "change-me")
     JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
     JWT_EXPIRATION_HOURS: int = int(os.getenv("JWT_EXPIRATION_HOURS", "24"))

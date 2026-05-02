@@ -1,9 +1,15 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.core.enums import VehicleStatus
 from app.schemas.common import ORMModel
+
+
+def _empty_to_none(v):
+    if v is not None and isinstance(v, str) and v.strip() == "":
+        return None
+    return v
 
 
 class VehicleCreate(BaseModel):
@@ -17,8 +23,13 @@ class VehicleCreate(BaseModel):
     cost_per_hour: float | None = Field(None, ge=0)
     max_shift_hours: int | None = Field(None, ge=0)
     ev: bool = False
-    depot_id: str
+    depot_id: str | None = None
     driver_id: str | None = None
+
+    @field_validator("id", "license_plate", "depot_id", "driver_id", mode="before")
+    @classmethod
+    def empty_to_none(cls, v):
+        return _empty_to_none(v)
 
 
 class VehicleUpdate(BaseModel):
@@ -34,6 +45,11 @@ class VehicleUpdate(BaseModel):
     depot_id: str | None = None
     driver_id: str | None = None
 
+    @field_validator("license_plate", "depot_id", "driver_id", mode="before")
+    @classmethod
+    def empty_to_none(cls, v):
+        return _empty_to_none(v)
+
 
 class VehicleResponse(ORMModel):
     id: str
@@ -46,7 +62,7 @@ class VehicleResponse(ORMModel):
     cost_per_hour: float | None = None
     max_shift_hours: int | None = None
     ev: bool
-    depot_id: str
+    depot_id: str | None = None
     driver_id: str | None = None
     driver_name: str | None = None
     created_at: datetime

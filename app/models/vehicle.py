@@ -21,9 +21,9 @@ class Vehicle(Base, TimestampMixin):
     max_shift_hours = Column(Integer)
     ev = Column(Boolean, nullable=False, default=False)
 
-    depot_id = Column(String, ForeignKey("depots.id", ondelete="RESTRICT"), nullable=False)
-    driver_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"))
+    depot_id = Column(String, ForeignKey("depots.id", ondelete="SET NULL"))
+    driver_id = Column(String, ForeignKey("drivers.id", ondelete="SET NULL"))
 
     depot = relationship("Depot", back_populates="vehicles")
-    driver = relationship("User", back_populates="vehicles")
+    driver = relationship("Driver", back_populates="vehicles")
     routes = relationship("Route", back_populates="vehicle")

@@ -7,6 +7,12 @@ class UserRole(StrEnum):
     DRIVER = "driver"
 
 
+class DriverStatus(StrEnum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    ON_LEAVE = "on_leave"
+
+
 class VehicleStatus(StrEnum):
     AVAILABLE = "available"
     IN_USE = "in_use"

@@ -9,10 +9,11 @@ from app.services.depot_service import get_depot_or_404
 
 
 def create_vehicle(db: Session, payload: VehicleCreate) -> Vehicle:
-    get_depot_or_404(db, payload.depot_id)
+    if payload.depot_id:
+        get_depot_or_404(db, payload.depot_id)
     if payload.driver_id:
-        from app.services.user_service import get_user_or_404
-        get_user_or_404(db, payload.driver_id)
+        from app.services.driver_profile_service import get_driver_or_404
+        get_driver_or_404(db, payload.driver_id)
 
     repo = VehicleRepository(db)
     vehicle_id = payload.id or generate_id("veh")
@@ -54,8 +55,8 @@ def update_vehicle(db: Session, vehicle_id: str, payload: VehicleUpdate) -> Vehi
     if "depot_id" in updates:
         get_depot_or_404(db, updates["depot_id"])
     if "driver_id" in updates and updates["driver_id"]:
-        from app.services.user_service import get_user_or_404
-        get_user_or_404(db, updates["driver_id"])
+        from app.services.driver_profile_service import get_driver_or_404
+        get_driver_or_404(db, updates["driver_id"])
     if "status" in updates:
         updates["status"] = updates["status"].value
 

@@ -148,6 +148,10 @@ def materialize_job(db: Session, job: OptimizationJob) -> OptimizationJob:
     if missing_v:
         return _fail("Some vehicles not found", missing_vehicle_ids=missing_v)
 
+    no_depot = [vid for vid in vehicle_ids if not vehicle_map[vid].depot_id]
+    if no_depot:
+        return _fail("Some vehicles have no depot assigned", vehicle_ids_without_depot=no_depot)
+
     locations = db.query(Location).filter(Location.id.in_(location_ids)).all()
     location_map = {cast(str, loc.id): loc for loc in locations}
     missing_l = [lid for lid in location_ids if lid not in location_map]

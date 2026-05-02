@@ -17,3 +17,5 @@ class Depot(Base, TimestampMixin):
 
     vehicles = relationship("Vehicle", back_populates="depot")
     routes = relationship("Route", back_populates="depot")
+    drivers = relationship("Driver", back_populates="depot")
+    user_assignments = relationship("UserDepot", back_populates="depot", cascade="all, delete-orphan")
