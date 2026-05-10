@@ -377,31 +377,123 @@ Error (400):
 ### 4.2 GENETIC ALGORITHM - Advanced Optimization
 
 ```http
-POST /api/optimize/genetic-algorithm
+POST /api/optimize/run
 Authorization: Bearer {token}
 
 Request:
 {
-  "point_ids": ["C001", "C002", ...],
-  "vehicle_ids": ["V001", "V002", "V003"],  # Multiple vehicles
-  "depot_id": "DEPOT_001",
-  
-  "ga_config": {
-    "population_size": 100,    # Kích thước quần thể
-    "generations": 500,        # Số thế hệ
-    "mutation_rate": 0.1,      # 10% đột biến
-    "crossover_rate": 0.8,     # 80% kết hợp
-    "elite_size": 5            # Giữ 5 lộ trình tốt nhất
-  },
+  "project_id": "PROJ_001",
+  "solver_algorithm": "genetic_algorithm",  # or "nearest_neighbor"
+  "objective": "minimize_distance",
+  "vehicles": ["V001", "V002", "V003"],
+  "locations": ["C001", "C002", "C003", ...],
   
   "constraints": {
-    "max_shift_hours": 8,
-    "service_priority": true,
-    "time_windows": true
-  },
-  
-  "use_google_maps": true
+    "max_vehicles": 5,              # Max vehicles to use
+    "max_route_distance_km": 200,  # Max km per route
+    "max_route_duration_mins": 480, # Max 8 hours per route
+    "allow_overload": false         # Strict capacity
+  }
 }
+
+Response (202 - Async):
+{
+  "job_id": "job_abc123",
+  "status": "calculating",
+  "estimated_time_seconds": 15.5
+}
+
+---
+
+### 4.2 GET OPTIMIZATION RESULT
+
+```http
+GET /api/optimize/job/{job_id}
+Authorization: Bearer {token}
+
+Response (200):
+{
+  "job_id": "job_abc123",
+  "project_id": "PROJ_001",
+  "status": "completed",
+  "solver_algorithm": "genetic_algorithm",
+  "objective": "minimize_distance",
+  "vehicle_ids": ["V001", "V002", "V003"],
+  "location_ids": ["C001", "C002", ...],
+  "constraints": {
+    "max_vehicles": null,
+    "max_route_distance_km": null,
+    "max_route_duration_mins": null,
+    "allow_overload": false
+  },
+  "result": {
+    "project_id": "PROJ_001",
+    "objective": "minimize_distance",
+    "solver_algorithm": "genetic_algorithm",
+    "total_distance_km": 312.5,
+    "total_duration_mins": 485,
+    "vehicles_used": 3,
+    "routes": [
+      {
+        "route_id": "route-job_abc123-1",
+        "vehicle_id": "V001",
+        "stop_count": 8,
+        "load_kg": 450,
+        "capacity_kg": 500,
+        "utilization_pct": 90.0,
+        "distance_km": 98.5,
+        "duration_mins": 155,
+        "total_cost": 49250
+      },
+      {
+        "route_id": "route-job_abc123-2",
+        "vehicle_id": "V002",
+        "stop_count": 7,
+        "load_kg": 420,
+        "capacity_kg": 500,
+        "utilization_pct": 84.0,
+        "distance_km": 112.0,
+        "duration_mins": 168,
+        "total_cost": 56000
+      },
+      {
+        "route_id": "route-job_abc123-3",
+        "vehicle_id": "V003",
+        "stop_count": 5,
+        "load_kg": 300,
+        "capacity_kg": 400,
+        "utilization_pct": 75.0,
+        "distance_km": 102.0,
+        "duration_mins": 162,
+        "total_cost": 51000
+      }
+    ],
+    "unassigned_customers": [],
+    "unassigned_count": 0
+  },
+  "created_at": "2024-03-06T10:30:00Z",
+  "ready_at": "2024-03-06T10:30:15Z",
+  "completed_at": "2024-03-06T10:30:16Z"
+}
+```
+
+### 4.3 CANCEL OPTIMIZATION JOB
+
+```http
+POST /api/optimize/job/{job_id}/cancel
+Authorization: Bearer {token}
+
+Response (200):
+{
+  "job_id": "job_abc123",
+  "status": "cancelled",
+  "message": "Job cancelled successfully"
+}
+```
+
+---
+
+### 4.4 GENETIC ALGORITHM - Detailed Config (Legacy)
 
 Response (200):
 {

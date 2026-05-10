@@ -615,7 +615,226 @@ def solve_with_early_stopping(self, patience=20):
 
 ---
 
-## 5. Hybrid Approach (Kết Hợp)
+## 5. VRP Solvers (Multi-Vehicle Optimization)
+
+### 5.1 True VRP vs TSP Approach
+
+**Sai lầm phổ biến:** Giải VRP bằng cách
+1. Phân bổ khách hàng cho xe trước
+2. Chạy TSP cho từng xe riêng lẻ
+
+→ **Không tối ưu!** Quyết định phân bổ không tính đến chi phí đường đi.
+
+**True VRP Solver:** Tối ưu hóa đồng thời:
+- Phân bổ khách hàng → xe nào
+- Thứ tự lộ trình → đi như thế nào
+
+→ **Tối ưu toàn cục** (global optimum)
+
+### 5.2 Sweep Algorithm (Multi-Vehicle NN)
+
+**Ý tưởng:**
+```
+1. Tính góc cực (polar angle) của mỗi khách hàng từ depot
+2. Sắp xếp khách hàng theo góc (0° → 360°)
+3. Quét vòng tròn, gán khách hàng cho xe hiện tại
+4. Khi đầy capacity → chuyển sang xe tiếp theo
+5. Tối ưu mỗi route bằng 2-opt
+```
+
+**Pseudocode:**
+```python
+FUNCTION sweep_cvrp(customers, vehicles):
+    # Sort by polar angle from depot
+    sorted_customers = SORT_BY_ANGLE(customers, depot)
+    
+    # Initialize empty routes
+    routes = {v.id: [] for v in vehicles}
+    loads = {v.id: 0 for v in vehicles}
+    current_vehicle = 0
+    
+    FOR EACH customer IN sorted_customers:
+        vehicle = vehicles[current_vehicle]
+        
+        IF loads[vehicle.id] + customer.demand <= vehicle.capacity:
+            routes[vehicle.id].append(customer)
+            loads[vehicle.id] += customer.demand
+        ELSE:
+            # Move to next vehicle
+            current_vehicle += 1
+            IF current_vehicle < len(vehicles):
+                routes[vehicles[current_vehicle].id].append(customer)
+                loads[vehicles[current_vehicle].id] = customer.demand
+            ELSE:
+                unassigned.append(customer)
+    
+    # Optimize each route with 2-opt
+    FOR EACH route IN routes:
+        IF route not empty:
+            route = two_opt(route)
+    
+    RETURN routes
+```
+
+**Ưu điểm:**
+- Nhanh: O(n log n) cho sorting + O(n) cho assignment
+- Tự nhiên: Khách hàng gần nhau về góc thường gần nhau về địa lý
+- Dễ implement: Logic đơn giản, dễ hiểu
+
+**Nhược điểm:**
+- Không xử lý tốt khách hàng nằm cùng góc nhưng xa depot
+- Không tối ưu toàn cục (chỉ là heuristic)
+
+### 5.3 Greedy CVRP Solver
+
+**Ý tưởng:**
+```
+1. Sắp xếp khách hàng theo demand giảm dần (lớn trước)
+2. Với mỗi khách hàng:
+   - Tìm xe gần nhất (khoảng cách depot→customer) có đủ capacity
+   - Gán khách hàng cho xe đó
+3. Tối ưu route bằng 2-opt
+```
+
+**Khi nào dùng:**
+- Khách hàng có demand chênh lệch lớn
+- Cần pack hiệu quả (bin packing)
+
+### 5.4 Genetic Algorithm for VRP (GA-VRP)
+
+**Khác biệt so với TSP-GA:**
+
+| Aspect | TSP-GA | VRP-GA |
+|--------|--------|--------|
+| **Chromosome** | List[Point] (1 route) | Dict[vehicle_id, List[customer_id]] |
+| **Fitness** | 1 / route_distance | 1 / (total_distance + penalties) |
+| **Crossover** | Order Crossover (OX) | Route-based crossover |
+| **Mutation** | Swap/Invert | Swap within route, Move between routes |
+
+**Chromosome Representation:**
+```python
+# VRP Solution as chromosome
+chromosome = {
+    "V1": ["C3", "C7", "C1"],   # Vehicle 1 serves C3→C7→C1
+    "V2": ["C5", "C2"],         # Vehicle 2 serves C5→C2
+    "V3": ["C8", "C4", "C6"],   # Vehicle 3 serves C8→C4→C6
+}
+```
+
+**Fitness Function:**
+```python
+def calculate_fitness(chromosome):
+    total_distance = sum(calculate_route_distance(route) 
+                        for route in chromosome.routes)
+    
+    # Penalties for constraint violations
+    penalty = 0
+    for vehicle_id, route in chromosome.routes.items():
+        vehicle = vehicle_map[vehicle_id]
+        load = sum(customer_map[c].demand for c in route)
+        if load > vehicle.capacity:
+            penalty += (load - vehicle.capacity) * 100
+    
+    # Missing customers
+    assigned = set()
+    for route in chromosome.routes.values():
+        assigned.update(route)
+    missing = all_customers - assigned
+    penalty += len(missing) * 10000
+    
+    fitness = 1 / (total_distance + penalty + vehicles_used * 10)
+    return fitness, total_distance
+```
+
+**Crossover (Route-Based):**
+```python
+def crossover_vrp(parent1, parent2):
+    child_routes = {}
+    
+    # Copy some routes from parent1
+    for vehicle_id in vehicles:
+        if random() < 0.5:
+            child_routes[vehicle_id] = copy(parent1.routes[vehicle_id])
+    
+    # Fill remaining customers from parent2
+    assigned = set()
+    for route in child_routes.values():
+        assigned.update(route)
+    
+    for vehicle_id in vehicles:
+        for customer in parent2.routes[vehicle_id]:
+            if customer not in assigned:
+                child_routes[vehicle_id].append(customer)
+                assigned.add(customer)
+    
+    return VRPChromosome(child_routes)
+```
+
+**Mutation Operators:**
+```python
+def mutate_vrp(chromosome, mutation_rate=0.1):
+    mutated = copy(chromosome)
+    
+    # 1. Swap within route
+    if random() < mutation_rate:
+        route = random_choice(mutated.routes)
+        if len(route) >= 2:
+            i, j = random_indices(route)
+            route[i], route[j] = route[j], route[i]
+    
+    # 2. Move between routes
+    if random() < mutation_rate:
+        from_route = random_choice(mutated.routes)
+        to_route = random_choice(other routes)
+        if from_route:
+            customer = random_pop(from_route)
+            to_route.append(customer)
+    
+    # 3. Invert segment (2-opt like)
+    if random() < mutation_rate * 0.5:
+        route = random_choice(mutated.routes)
+        if len(route) >= 3:
+            i, j = sorted(random_indices(route))
+            route[i:j+1] = reversed(route[i:j+1])
+    
+    return mutated
+```
+
+### 5.5 So Sánh Các VRP Solver
+
+| Thuật toán | Tốc độ | Chất lượng | Phù hợp |
+|-----------|--------|-----------|---------|
+| **Sweep** | ⚡⚡⚡ (0.1s) | ⭐⭐⭐ | Nhiều khách, cần nhanh |
+| **Greedy** | ⚡⚡⚡ (0.1s) | ⭐⭐⭐ | Demand chênh lệch |
+| **GA-VRP** | ⚡⚡ (5-10s) | ⭐⭐⭐⭐⭐ | Cần tối ưu nhất |
+
+### 5.6 Module Structure
+
+```
+app/algorithms/
+├── vrp_solver.py          # Unified interface
+│   ├── Customer           # (id, lat, lng, demand)
+│   ├── Vehicle            # (id, capacity, depot_lat, depot_lng)
+│   ├── Route              # (vehicle_id, customer_ids, distance)
+│   └── VRPSolution        # (routes, total_distance, unassigned)
+│
+├── cvrp_solver.py         # CVRP implementations
+│   ├── SweepCVRPSolver    # Sweep algorithm
+│   ├── GreedyCVRPSolver   # Greedy assignment
+│   └── solve_cvrp()       # Factory function
+│
+├── genetic_algorithm_vrp.py  # GA for multi-vehicle
+│   ├── VRPChromosome      # Dict-based representation
+│   ├── genetic_algorithm_vrp()  # Main solver
+│   └── _crossover_vrp()     # Route crossover
+│
+└── nearest_neighbor.py    # TSP (single vehicle)
+    └── two_opt()          # Route improvement
+```
+
+---
+
+## 6. Hybrid Approach (Kết Hợp)
 
 ```
 Ý tưởng: Dùng NN để tạo quần thể ban đầu tốt → GA tinh chỉnh

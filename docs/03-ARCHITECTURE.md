@@ -145,23 +145,62 @@ OptimizationService
 
 ### 3.3 **Algorithm Layer** (Tính toán)
 
+#### **VRP Solvers (Multi-Vehicle)**
+
+```
+vrp_solver.py              # Unified interface
+├── Customer               # (id, lat, lng, demand)
+├── Vehicle                # (id, capacity, depot_lat, depot_lng)
+├── Route                  # Single vehicle route
+└── VRPSolution            # Complete VRP solution
+
+cvrp_solver.py             # Capacitated VRP solvers
+├── SweepCVRPSolver        # Polar angle clustering
+│   └── solve(customers, vehicles) → VRPSolution
+├── GreedyCVRPSolver       # Greedy assignment
+│   └── solve(customers, vehicles) → VRPSolution
+└── solve_cvrp()           # Factory function
+
+genetic_algorithm_vrp.py   # GA for multi-vehicle VRP
+├── VRPChromosome          # {vehicle_id: [customer_ids]}
+├── genetic_algorithm_vrp() → VRPSolution
+│   ├── _create_initial_population_vrp()
+│   ├── _calculate_chromosome_fitness()  # With penalties
+│   ├── _crossover_vrp()     # Route-based crossover
+│   └── _mutate_vrp()        # Swap/Move/Invert
+```
+
+#### **TSP Solvers (Single Vehicle - Legacy)**
+
 ```
 nearest_neighbor.py
-├── class NearestNeighbor:
-│   ├── __init__(distance_func)
-│   ├── solve(points, start_point) → Route
-│   └── _find_nearest(current, unvisited) → Point
+├── nearest_neighbor(distance_matrix) → (route, distance)
+└── two_opt(route, matrix) → (improved_route, distance)
 
-genetic_algorithm.py
-├── class GeneticAlgorithm:
-│   ├── __init__(population_size, generations, mutation_rate)
-│   ├── solve(points, vehicles) → List[Route]
-│   ├── _create_population() → Population
-│   ├── _evaluate_fitness(population) → scores
-│   ├── _selection(population) → selected
-│   ├── _crossover(parent1, parent2) → child
-│   ├── _mutation(route) → mutated_route
-│   └── _best_solution() → Route
+genetic_algorithm.py       # TSP only (single vehicle)
+└── genetic_algorithm(distance_matrix) → (route, distance)
+
+distance.py
+├── haversine(lat1, lon1, lat2, lon2) → km
+└── build_distance_matrix(points) → matrix
+```
+
+#### **Architecture Principle**
+
+**Old (2-Stage):** Assignment → TSP for each vehicle  
+**New (True VRP):** VRP solver optimizes assignment + routing simultaneously
+
+```python
+# Old approach - NOT optimal
+assigned = assign_to_vehicles(customers, vehicles)  # No routing info
+for vehicle, stops in assigned.items():
+    route = solve_tsp(stops)  # Local optimization only
+
+# New approach - True VRP optimization
+solution = solve_cvrp(customers, vehicles, algorithm="sweep")
+# or
+solution = genetic_algorithm_vrp(customers, vehicles)
+# → Globally optimized assignment + routing
 ```
 
 ### 3.4 **API Layer** (REST endpoints)

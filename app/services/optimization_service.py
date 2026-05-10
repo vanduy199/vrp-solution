@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
 from typing import Any, cast
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.algorithms.distance import build_distance_matrix
-from app.algorithms.genetic_algorithm import genetic_algorithm
-from app.algorithms.nearest_neighbor import nearest_neighbor
+from app.algorithms.cvrp_solver import solve_cvrp
+from app.algorithms.genetic_algorithm_vrp import genetic_algorithm_vrp
+from app.algorithms.vrp_solver import Customer, Vehicle, VRPSolution
 from app.core.config import settings
 from app.core.enums import JobStatus, RouteStatus, SolverAlgorithm
 from app.core.ids import generate_id
@@ -17,7 +16,7 @@ from app.models.location import Location
 from app.models.optimization_job import OptimizationJob
 from app.models.route import Route
 from app.models.route_stop import RouteStop
-from app.models.vehicle import Vehicle
+from app.models.vehicle import Vehicle as VehicleModel
 from app.repositories.optimization_job_repo import OptimizationJobRepository
 from app.schemas.optimization import OptimizeRunRequest
 
@@ -65,58 +64,52 @@ def cancel_job(db: Session, job_id: str) -> OptimizationJob:
     return OptimizationJobRepository(db).update(job, status=JobStatus.CANCELLED.value)
 
 
-def _run_solver(algorithm: str, distance_matrix: list) -> tuple[list[int], float]:
-    if algorithm in {SolverAlgorithm.GENETIC_ALGORITHM.value, "ga"}:
-        route, dist = genetic_algorithm(distance_matrix)
-    else:
-        route, dist = nearest_neighbor(distance_matrix)
-    return route, dist
-
-
-def _assign_locations_to_vehicles(
+def _build_vrp_data(
+    vehicle_map: dict[str, VehicleModel],
+    location_map: dict[str, Location],
     vehicle_ids: list[str],
     location_ids: list[str],
-    vehicle_map: dict[str, Vehicle],
-    location_map: dict[str, Location],
-) -> tuple[dict[str, list[str]], dict[str, int]]:
-    capacity_by_vehicle = {
-        vid: int(vehicle_map[vid].capacity_kg or 0) for vid in vehicle_ids
-    }
-    vehicle_loads: dict[str, int] = {vid: 0 for vid in vehicle_ids}
-    assigned: dict[str, list[str]] = {vid: [] for vid in vehicle_ids}
+) -> tuple[list[Customer], list[Vehicle]]:
+    """Convert DB models to VRP solver data structures."""
+    # Build customers
+    customers: list[Customer] = []
+    for lid in location_ids:
+        loc = location_map[lid]
+        customers.append(Customer(
+            id=lid,
+            lat=float(loc.lat),
+            lng=float(loc.lng),
+            demand=float(loc.demand_kg or 0),
+        ))
 
-    sorted_lids = sorted(
-        location_ids,
-        key=lambda lid: (int(location_map[lid].demand_kg or 0), int(location_map[lid].priority or 0)),
-        reverse=True,
-    )
+    # Build vehicles
+    vrp_vehicles: list[Vehicle] = []
+    for vid in vehicle_ids:
+        v = vehicle_map[vid]
+        depot_lat = float(v.depot.lat) if v.depot else 0.0
+        depot_lng = float(v.depot.lng) if v.depot else 0.0
+        vrp_vehicles.append(Vehicle(
+            id=vid,
+            capacity=float(v.capacity_kg or 0),
+            depot_lat=depot_lat,
+            depot_lng=depot_lng,
+            cost_per_km=float(v.cost_per_km or 0.0),
+        ))
 
-    for lid in sorted_lids:
-        demand = int(location_map[lid].demand_kg or 0)
-        fitting = [
-            vid for vid in vehicle_ids
-            if capacity_by_vehicle[vid] <= 0
-            or vehicle_loads[vid] + demand <= capacity_by_vehicle[vid]
-        ]
-        target = min(
-            fitting if fitting else vehicle_ids,
-            key=lambda vid: (vehicle_loads[vid], -capacity_by_vehicle.get(vid, 0)),
-        )
-        assigned[target].append(lid)
-        vehicle_loads[target] += demand
-
-    return assigned, vehicle_loads
+    return customers, vrp_vehicles
 
 
-def _resolve_depot(vehicle: Vehicle | None, locations: list[Location]) -> tuple[float, float]:
-    if vehicle and vehicle.depot:
-        return float(vehicle.depot.lat), float(vehicle.depot.lng)
-    if locations:
-        return (
-            sum(float(loc.lat) for loc in locations) / len(locations),
-            sum(float(loc.lng) for loc in locations) / len(locations),
-        )
-    return 0.0, 0.0
+def _run_vrp_solver(
+    algorithm: str,
+    customers: list[Customer],
+    vehicles: list[Vehicle],
+) -> VRPSolution:
+    """Run VRP solver and return solution."""
+    if algorithm in {SolverAlgorithm.GENETIC_ALGORITHM.value, "ga"}:
+        return genetic_algorithm_vrp(customers, vehicles)
+    else:
+        # Default to sweep algorithm for nearest_neighbor
+        return solve_cvrp(customers, vehicles, algorithm="sweep")
 
 
 def materialize_job(db: Session, job: OptimizationJob) -> OptimizationJob:
@@ -158,68 +151,49 @@ def materialize_job(db: Session, job: OptimizationJob) -> OptimizationJob:
     if missing_l:
         return _fail("Some locations not found", missing_location_ids=missing_l)
 
-    assigned, vehicle_loads = _assign_locations_to_vehicles(
-        vehicle_ids, location_ids, vehicle_map, location_map
-    )
+    # Build VRP data and solve
+    customers, vrp_vehicles = _build_vrp_data(vehicle_map, location_map, vehicle_ids, location_ids)
+    vrp_solution = _run_vrp_solver(algorithm, customers, vrp_vehicles)
 
     planned_routes: list[dict[str, Any]] = []
-    total_distance_km = 0.0
+    total_distance_km = vrp_solution.total_distance_km
     now = datetime.now(timezone.utc)
     avg_speed = settings.DEFAULT_AVG_SPEED_KMH
 
-    for idx, vid in enumerate(vehicle_ids):
-        stop_ids = assigned.get(vid, [])
-        vehicle = vehicle_map[vid]
-
-        if not stop_ids:
+    # Create routes from VRP solution
+    for idx, route in enumerate(vrp_solution.routes):
+        if not route.customer_ids:
             continue
 
-        stop_locs = [location_map[lid] for lid in stop_ids]
-        depot_lat, depot_lng = _resolve_depot(vehicle, stop_locs)
-        depot_ns = SimpleNamespace(id="__depot__", lat=depot_lat, lng=depot_lng)
-        solver_points = [depot_ns, *stop_locs]
+        vehicle = vehicle_map[route.vehicle_id]
+        ordered_stop_ids = route.customer_ids
+        route_dist_km = route.total_distance_km
 
-        matrix = build_distance_matrix(solver_points)
-        raw_route, route_dist_km = _run_solver(algorithm, matrix)
-
-        raw_indices = [i for i in raw_route if isinstance(i, int) and 1 <= i < len(solver_points)]
-        seen: set[int] = set()
-        ordered_indices: list[int] = []
-        for i in raw_indices:
-            if i not in seen:
-                seen.add(i)
-                ordered_indices.append(i)
-        for i in range(1, len(solver_points)):
-            if i not in seen:
-                ordered_indices.append(i)
-
-        ordered_stop_ids = [cast(str, solver_points[i].id) for i in ordered_indices]
-        duration_mins = round((route_dist_km / avg_speed) * 60 + len(ordered_stop_ids) * 10, 2)
-        load_kg = vehicle_loads.get(vid, 0)
+        load_kg = int(route.total_demand)
         capacity = int(vehicle.capacity_kg or 0)
         utilization = round((load_kg / capacity) * 100, 2) if capacity > 0 else 0.0
         cost_per_km = float(vehicle.cost_per_km or 0.0)
         total_cost = round(route_dist_km * cost_per_km, 2)
-        total_distance_km += route_dist_km
+        duration_mins = round((route_dist_km / avg_speed) * 60 + len(ordered_stop_ids) * 10, 2)
 
         route_id = f"route-{job.id}-{idx + 1}"
-        route = db.get(Route, route_id)
-        if route is None:
-            route = Route(
+        db_route = db.get(Route, route_id)
+        if db_route is None:
+            db_route = Route(
                 id=route_id,
                 job_id=cast(str, job.id),
-                vehicle_id=vid,
+                vehicle_id=route.vehicle_id,
                 depot_id=cast(str, vehicle.depot_id),
             )
-            db.add(route)
+            db.add(db_route)
 
-        route.status = RouteStatus.PLANNED.value
-        route.total_distance_km = round(route_dist_km, 2)
-        route.total_duration_mins = duration_mins
-        route.total_cost = total_cost
-        route.load_kg = load_kg
-        route.utilization_pct = utilization
-        route.updated_at = now
+        db_route.status = RouteStatus.PLANNED.value
+        db_route.total_distance_km = round(route_dist_km, 2)
+        db_route.total_duration_mins = duration_mins
+        db_route.total_cost = total_cost
+        db_route.load_kg = load_kg
+        db_route.utilization_pct = utilization
+        db_route.updated_at = now
 
         db.query(RouteStop).filter(RouteStop.route_id == route_id).delete()
         for seq, loc_id in enumerate(ordered_stop_ids):
@@ -234,7 +208,7 @@ def materialize_job(db: Session, job: OptimizationJob) -> OptimizationJob:
         planned_routes.append(
             {
                 "route_id": route_id,
-                "vehicle_id": vid,
+                "vehicle_id": route.vehicle_id,
                 "stop_count": len(ordered_stop_ids),
                 "load_kg": load_kg,
                 "capacity_kg": capacity,
@@ -245,15 +219,21 @@ def materialize_job(db: Session, job: OptimizationJob) -> OptimizationJob:
             }
         )
 
-    total_duration = round((total_distance_km / avg_speed) * 60 + len(location_ids) * 10, 2)
-    result: dict[str, Any] = {
+    # Handle unassigned customers
+    result = {
         "project_id": job.project_id,
         "objective": job.objective,
         "solver_algorithm": job.solver_algorithm,
         "total_distance_km": round(total_distance_km, 2),
-        "total_duration_mins": total_duration,
+        "total_duration_mins": round((total_distance_km / avg_speed) * 60 + len(location_ids) * 10, 2),
+        "vehicles_used": len(planned_routes),
         "routes": planned_routes,
     }
+
+    # Handle unassigned customers
+    if vrp_solution.unassigned_customers:
+        result["unassigned_customers"] = vrp_solution.unassigned_customers
+        result["unassigned_count"] = len(vrp_solution.unassigned_customers)
 
     OptimizationJobRepository(db).update(
         job,

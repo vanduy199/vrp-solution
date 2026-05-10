@@ -102,26 +102,32 @@ Dashboard            REST Endpoints      NN + GA         Data Persistence
 ## 💻 Cấu Trúc Code
 
 ```
-src/
+app/
 ├── models/              # Data models
-│   ├── point.py        # Customer location
-│   ├── vehicle.py      # Vehicle info
-│   └── route.py        # Route result
+│   ├── location.py      # Customer location
+│   ├── vehicle.py       # Vehicle info
+│   ├── route.py         # Route result
+│   └── depot.py         # Depot info
 ├── algorithms/          # Core compute
-│   ├── nearest_neighbor.py
-│   ├── genetic_algorithm.py
-│   └── distance.py
+│   ├── vrp_solver.py    # Unified VRP interface (Customer, Vehicle, Route)
+│   ├── cvrp_solver.py   # CVRP solvers (Sweep, Greedy)
+│   ├── genetic_algorithm_vrp.py  # GA for multi-vehicle VRP
+│   ├── nearest_neighbor.py      # TSP only (legacy)
+│   ├── genetic_algorithm.py     # GA for TSP (legacy)
+│   └── distance.py      # Haversine distance
 ├── services/            # Business logic
-│   ├── routing_service.py
-│   └── optimization_service.py
+│   ├── optimization_service.py  # VRP optimization
+│   ├── route_service.py
+│   └── location_service.py
 ├── database/            # Persistence
 │   └── models.py
 ├── api/                 # REST APIs
-│   ├── router_api.py
-│   └── vehicle_api.py
-└── utils/               # Helpers
-    ├── config.py
-    └── logger.py
+│   └── v1/
+│       ├── optimize.py  # VRP optimization endpoints
+│       ├── routes.py
+│       └── locations.py
+└── schemas/             # Pydantic schemas
+    └── optimization.py  # VRPConstraints, OptimizeRunRequest
 ```
 
 ---
@@ -133,7 +139,7 @@ Backend:       Python 3.11 + FastAPI
 Frontend:      Streamlit
 Database:      PostgreSQL / SQLite
 Cache:         Redis (optional)
-Algorithms:    Nearest Neighbor, Genetic Algorithm
+Algorithms:    VRP Sweep, VRP Greedy, GA-VRP (multi-vehicle), TSP NN/GA (legacy)
 Mapping:       Google Maps API, Folium
 Testing:       pytest
 Deployment:    Docker, GitHub Actions
@@ -153,13 +159,28 @@ Deployment:    Docker, GitHub Actions
 - **Chất lượng:** 85-95% so với tối ưu  
 - **Dùng khi:** Cần kết quả tốt nhất, có thời gian
 
+### 3. **Sweep Algorithm** (Quét)
+- **Tốc độ:** O(n log n) - Nhanh  
+- **Chất lượng:** 80-90% so với tối ưu  
+- **Dùng khi:** Cần kết quả tốt, số điểm lớn
+
+### 4. **Greedy Algorithm** (Tham Lam)
+- **Tốc độ:** O(n log n) - Nhanh  
+- **Chất lượng:** 80-90% so với tối ưu  
+- **Dùng khi:** Cần kết quả tốt, số điểm lớn
+
 ### So Sánh
 
-| Tiêu Chí | NN | GA |
-|----------|----|----|
-| Tốc độ | ⚡⚡⚡ | ⚡⚡ |
-| Chất lượng | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
-| Phức tạp code | Dễ | Phức tạp |
+| Tiêu Chí | Sweep | Greedy | GA-VRP |
+|----------|-------|--------|--------|
+| **Tốc độ** | ⚡⚡⚡ (0.1s) | ⚡⚡⚡ (0.1s) | ⚡⚡ (5-10s) |
+| **Chất lượng** | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **Multi-vehicle** | ✅ | ✅ | ✅ |
+| **Capacity constraints** | ✅ | ✅ | ✅ |
+| **Global optimization** | ⚠️ Heuristic | ⚠️ Heuristic | ✅ True VRP |
+
+> **Lưu ý:** Các thuật toán TSP cũ (Nearest Neighbor, GA TSP) chỉ giải 1 xe.  
+> Các thuật toán mới (Sweep, Greedy, GA-VRP) giải **true VRP** - tối ưu đồng thời phân bổ xe + lộ trình.
 
 ---
 

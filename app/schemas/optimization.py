@@ -7,13 +7,34 @@ from app.core.enums import JobStatus, Objective, SolverAlgorithm
 from app.schemas.common import ORMModel
 
 
+class VRPConstraints(BaseModel):
+    """VRP-specific optimization constraints."""
+
+    max_vehicles: int | None = Field(
+        None,
+        description="Maximum number of vehicles to use (None = use all available)",
+    )
+    max_route_distance_km: float | None = Field(
+        None,
+        description="Maximum distance per route in km",
+    )
+    max_route_duration_mins: float | None = Field(
+        None,
+        description="Maximum duration per route in minutes",
+    )
+    allow_overload: bool = Field(
+        False,
+        description="Allow slight capacity overloading (penalty-based)",
+    )
+
+
 class OptimizeRunRequest(BaseModel):
     project_id: str
     solver_algorithm: SolverAlgorithm = SolverAlgorithm.NEAREST_NEIGHBOR
     objective: Objective = Objective.MINIMIZE_DISTANCE
     vehicles: list[str] = Field(..., min_length=1)
     locations: list[str] = Field(..., min_length=1)
-    constraints: dict[str, Any] = Field(default_factory=dict)
+    constraints: VRPConstraints = Field(default_factory=VRPConstraints)
 
 
 class OptimizeRunResponse(BaseModel):
