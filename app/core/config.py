@@ -27,6 +27,7 @@ class Settings:
     MAP_PROVIDER: str = os.getenv("MAP_PROVIDER", "locationiq")
     LOCATIONIQ_API_KEY: str = os.getenv("LOCATIONIQ_API_KEY", "")
     GOONG_API_KEY: str = os.getenv("GOONG_API_KEY", "")
+    SERPER_API_KEY: str = os.getenv("SERPER_API_KEY", "")
 
     JWT_SECRET: str = os.getenv("JWT_SECRET_KEY", "change-me")
     JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")

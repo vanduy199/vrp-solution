@@ -189,9 +189,9 @@ class SweepCVRPSolver:
                 vehicle = vehicles[v_idx]
                 route = routes[v_idx]
 
-                # Check capacity constraint
+                # Check capacity constraint (0 = unlimited)
                 new_demand = route.total_demand + customer.demand
-                if new_demand <= vehicle.capacity:
+                if vehicle.capacity == 0 or new_demand <= vehicle.capacity:
                     route.customer_ids.append(customer.id)
                     route.total_demand = new_demand
                     vehicle_idx = v_idx  # Continue with this vehicle
@@ -286,7 +286,7 @@ class GreedyCVRPSolver:
 
             for v in vehicles:
                 current_load = vehicle_loads[v.id]
-                if current_load + customer.demand <= v.capacity:
+                if v.capacity == 0 or current_load + customer.demand <= v.capacity:
                     # Distance from vehicle depot to customer
                     dist = haversine(v.depot_lat, v.depot_lng, customer.lat, customer.lng)
                     if dist < best_distance:

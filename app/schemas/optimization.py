@@ -10,22 +10,15 @@ from app.schemas.common import ORMModel
 class VRPConstraints(BaseModel):
     """VRP-specific optimization constraints."""
 
-    max_vehicles: int | None = Field(
-        None,
-        description="Maximum number of vehicles to use (None = use all available)",
-    )
-    max_route_distance_km: float | None = Field(
-        None,
-        description="Maximum distance per route in km",
-    )
-    max_route_duration_mins: float | None = Field(
-        None,
-        description="Maximum duration per route in minutes",
-    )
-    allow_overload: bool = Field(
-        False,
-        description="Allow slight capacity overloading (penalty-based)",
-    )
+    model_config = {"extra": "allow"}
+
+    max_vehicles: int | None = Field(None)
+    max_route_distance_km: float | None = Field(None)
+    max_route_duration_mins: float | None = Field(None)
+    allow_overload: bool = Field(False)
+    strict_time_windows: bool = Field(False)
+    respect_capacity: bool = Field(True)
+    avoid_tolls: bool = Field(False)
 
 
 class OptimizeRunRequest(BaseModel):

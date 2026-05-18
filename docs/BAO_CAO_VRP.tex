@@ -1,0 +1,1167 @@
+\documentclass[12pt,a4paper,openany,oneside]{report}
+\usepackage[utf8]{vietnam}
+\usepackage{amsmath, amsthm, amssymb,amsxtra,latexsym,amscd,graphpap,makeidx}
+\usepackage{pgf,tikz}
+\usepackage{mathrsfs}
+\usetikzlibrary{arrows}
+\usepackage{float}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{graphicx}
+\usepackage{array,tabularx,longtable,multicol,indentfirst,fancyhdr}%
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage[mathscr]{eucal}
+\usepackage[top=3.5cm, bottom=3.0cm, left=3.5cm, right=2cm] {geometry}
+\usepackage{fancybox}
+
+%==================================  
+\newtheorem{dl}{Định lý}[section]
+\newtheorem{dn}[dl]{Định nghĩa} 
+\newtheorem{bt}[dl]{Bài toán} 
+\newtheorem{tc}[dl]{Tính chất} 
+\newtheorem{md}[dl]{Mệnh đề} 
+\newtheorem{bd}[dl]{Bổ đề} 
+\newtheorem{hq}[dl]{Hệ quả} 
+\newtheorem{nx}[dl]{Nhận xét} 
+\newtheorem{cy}[dl]{Chú ý} 
+\newtheorem{vd}[dl]{Ví dụ} 
+
+\usepackage{hyperref}
+\usepackage{xcolor}
+
+% Code listings
+\usepackage{listings}
+\lstset{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    backgroundcolor=\color{gray!10},
+    keywordstyle=\color{blue},
+    commentstyle=\color{green!60!black},
+    stringstyle=\color{red},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    numbersep=5pt,
+    showstringspaces=false,
+}
+
+% Custom commands
+\newcommand{\bigO}{\mathcal{O}}
+\def\bpr{\begin{proof}}
+\def\epr{\end{proof}}
+\newenvironment{giai}{\noindent{\em \textit{Giải}. }}{\hfill $\square$}
+
+% Algorithm style
+\renewcommand{\algorithmicrequire}{\textbf{Input:}}
+\renewcommand{\algorithmicensure}{\textbf{Output:}}
+
+% Page style
+\makeatletter 
+\renewcommand{\ps@plain}{
+    \renewcommand{\@oddhead}{\hfil{\thepage}\hfil}
+    \renewcommand{\@evenhead}{\@oddhead}
+    \renewcommand{\@oddfoot}{\empty}
+    \renewcommand{\@evenfoot}{\@oddfoot}   }
+\makeatother
+
+\allowdisplaybreaks
+
+\begin{document}
+
+%========================================
+% TRANG BÌA
+%========================================
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{Báo cáo đồ án VRP}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancyfoot[L]{Nguyễn Văn A}
+\fancyfoot[R]{\roman{page}}
+\renewcommand{\footrulewidth}{0.4pt}
+
+\pagenumbering{gobble}
+
+\newgeometry{top=2.0cm,bottom=3.0cm,left=3.0cm,right=2.8cm}
+\setlength{\fboxrule}{1.5pt}
+\thisfancypage{\setlength{\fboxsep}{10pt}\setlength{\shadowsize}{0pt}\doublebox}{}
+
+\begin{titlepage}
+\fontsize{14pt}{14pt}\selectfont \baselineskip 0.65cm
+\thispagestyle{empty}
+\begin{center}
+{HỌC VIỆN CÔNG NGHỆ BƯU CHÍNH VIỄN THÔNG}\\
+\textbf{\MakeUppercase{KHOA CÔNG NGHỆ THÔNG TIN}}\\
+\centerline{--------------------o0o--------------------}  
+\end{center}
+
+\vspace{0.5cm}
+\begin{center}
+\textbf{\MakeUppercase{\LARGE \bf BÁO CÁO ĐỒ ÁN TỐT NGHIỆP}}\\ 
+\end{center} 
+
+\vspace{1cm}
+\begin{center}
+\textbf{Đề tài:}
+\textbf{\MakeUppercase{ \bf ``HỆ THỐNG TỐI ƯU HÓA LỘ TRÌNH VẬN TẢI -- VEHICLE ROUTING PROBLEM''}}\\ 
+\end{center} 
+\vspace{2cm}
+
+\begin{tabular}{ll}
+\textbf{\large{Giảng Viên Hướng Dẫn: }} & \textbf{\large{TS. Nguyễn Kiều Linh}} \\
+\textbf{\large{Sinh viên thực hiện:}}}  & \textbf{\large{Nguyễn Văn A}} \\
+\textbf{\large{Mã sinh viên: }}}  & \textbf{\large{BXXDCCNYYY}} \\
+\textbf{\large{Lớp:}}}   & \textbf{\large{D19HTTT01}}\\
+\textbf{\large{Niên khóa:}}}   & \textbf{\large{20xx-20xx}}\\
+\textbf{\large{Hệ đào tạo:}}}   & \textbf{\large{Đại học chính quy}}
+\end{tabular}
+
+\vfill
+\begin{center}
+{{\bf Hà Nội, 12/2023}}
+\end{center}
+\end{titlepage}
+
+%========================================
+% TRANG BÌA PHỤ
+%========================================
+\newgeometry{top=2.0cm,bottom=3.0cm,left=3.0cm,right=2.8cm}
+\setlength{\fboxrule}{1.5pt}
+\thisfancypage{\setlength{\fboxsep}{10pt}\setlength{\shadowsize}{0pt}\doublebox}{}
+
+\fontsize{14pt}{14pt}\selectfont \baselineskip 0.65cm
+\thispagestyle{empty}
+\begin{center}
+{HỌC VIỆN CÔNG NGHỆ BƯU CHÍNH VIỄN THÔNG}\\
+\textbf{\MakeUppercase{KHOA CÔNG NGHỆ THÔNG TIN}}\\
+\centerline{--------------------o0o--------------------}  
+\end{center}
+
+\vspace{0.5cm}
+\begin{center}
+\textbf{\MakeUppercase{\LARGE \bf BÁO CÁO ĐỒ ÁN TỐT NGHIỆP}}\\ 
+\end{center} 
+
+\vspace{1cm}
+\begin{center}
+\textbf{Đề tài:}
+\textbf{\MakeUppercase{ \bf ``HỆ THỐNG TỐI ƯU HÓA LỘ TRÌNH VẬN TẢI -- VEHICLE ROUTING PROBLEM''}}\\ 
+\end{center} 
+\vspace{2cm}
+
+\begin{tabular}{ll}
+{\textbf{\large{Giảng Viên Hướng Dẫn: }}} & {\large TS. Nguyễn Kiều Linh}\\
+{\textbf{\large{Sinh viên thực hiện:}}}  & {\large Nguyễn Văn A} \\
+{\textbf{\large{Mã sinh viên: }}}  & {\large BXXDCCNYYY} \\
+{\textbf{\large{Lớp:}}}   & {\large D19HTTT01}\\
+{\textbf{\large{Niên khóa:}}}   & {\large 20xx-20xx}\\
+{\textbf{\large{Hệ đào tạo:}}}   & {\large Đại học chính quy}
+\end{tabular}
+
+\vfill
+\begin{center}
+{{\bf Hà Nội, 12/2023}}
+\end{center}
+
+%========================================
+% NHẬN XÉT GIẢNG VIÊN HƯỚNG DẪN
+%========================================
+\newpage
+\newgeometry{top=2.5cm,bottom=2cm,left=3cm,right=2cm} 
+\thispagestyle{empty}
+\begin{center}
+{\textbf{\Large{NHẬN XÉT CỦA GIẢNG VIÊN HƯỚNG DẪN}}}
+\end{center}
+
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill
+
+\vspace{1cm}
+
+{\textbf{\large{Điểm: }}} \hspace{1.0cm}\textbf{( Bằng chữ:}  \hspace{2.5cm}\textbf{)}  
+
+\begin{flushright}
+Hà Nội, ngày \hspace{0.75cm} tháng \hspace{0.75cm} năm 20...\hspace{0.75cm}
+
+{\textbf{\large{Giảng viên hướng dẫn }}} \hspace{1cm} \textcolor{white}{.}
+\end{flushright}
+
+%========================================
+% NHẬN XÉT GIẢNG VIÊN PHẢN BIỆN
+%========================================
+\newpage
+\newgeometry{top=2.5cm,bottom=2cm,left=3cm,right=2cm} 
+\thispagestyle{empty}
+\begin{center}
+{\textbf{\Large{NHẬN XÉT CỦA GIẢNG VIÊN PHẢN BIỆN}}}
+\end{center}
+
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill \vspace{0.25cm} \par
+\dotfill
+
+\vspace{1cm}
+
+{\textbf{\large{Điểm: }}} \hspace{1.0cm}\textbf{( Bằng chữ:}  \hspace{2.5cm}\textbf{)}  
+
+\begin{flushright}
+Hà Nội, ngày \hspace{0.75cm} tháng \hspace{0.75cm} năm 20...\hspace{0.75cm}
+
+{\textbf{\large{Giảng viên phản biện }}} \hspace{1cm} \textcolor{white}{.}
+\end{flushright}
+
+%========================================
+% MỤC LỤC
+%========================================
+\restoregeometry
+\pagestyle{fancy}
+\pagenumbering{roman}
+\fontsize{13pt}{13pt}\selectfont \baselineskip 0.75cm 
+
+\newpage
+\thispagestyle{empty}
+\tableofcontents
+
+%========================================
+% LỜI CẢM ƠN
+%========================================
+\newpage
+\begin{center}
+\Large{\textbf{LỜI CẢM ƠN}}\\
+\end{center}
+\vspace{1cm}
+
+Em xin chân thành cảm ơn Học viện Công nghệ Bưu chính Viễn thông đã tạo điều kiện thuận lợi cho em trong quá trình thực hiện đồ án tốt nghiệp.
+
+Em xin gửi lời cảm ơn sâu sắc đến TS. Nguyễn Kiều Linh, giảng viên hướng dẫn, đã tận tình chỉ bảo, hướng dẫn và động viên em trong suốt quá trình thực hiện đồ án.
+
+Em cũng xin cảm ơn các thầy cô trong Khoa Công nghệ thông tin đã truyền đạt kiến thức quý báu, giúp em có nền tảng vững chắc để hoàn thành đồ án này.
+
+\vspace{1cm}
+\phantom{nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn}\  {\textit{Hà Nội, tháng ....  năm 20....}} \\
+\phantom{nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn} {Sinh viên}\\
+\phantom{nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn} \\
+\phantom{nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn} \\ 
+\phantom{nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn}   {Nguyễn Văn A}
+
+%========================================
+% DANH SÁCH HÌNH VẼ
+%========================================
+\newpage 
+\addcontentsline{toc}{chapter}{\bf  Danh sách hình vẽ} 
+\listoffigures
+
+%========================================
+% DANH SÁCH BẢNG
+%========================================
+\newpage 
+\addcontentsline{toc}{chapter}{\bf  Danh sách bảng} 
+\listoftables
+
+%========================================
+% DANH MỤC KÝ HIỆU
+%========================================
+\newpage
+{\addcontentsline{toc}{chapter}{Danh sách các ký hiệu và chữ viết tắt}}
+
+\begin{center}
+{\LARGE
+{\bf Danh mục các ký hiệu và chữ viết tắt}}
+\end{center}
+\vspace{1.25cm}
+{\fontsize{13}{13}\selectfont
+\begin{tabular}{ll}
+VRP & Vehicle Routing Problem -- Bài toán định tuyến phương tiện \\
+CVRP & Capacitated VRP -- VRP có ràng buộc dung tích \\
+VRPTW & VRP with Time Windows -- VRP có khung giờ \\
+GA & Genetic Algorithm -- Thuật toán di truyền \\
+NN & Nearest Neighbor -- Thuật toán láng giềng gần nhất \\
+TSP & Traveling Salesman Problem -- Bài toán người du lịch \\
+$O(.)$ & Ký hiệu Big-O cho độ phức tạp thuật toán \\
+$n$ & Số điểm giao hàng (customers) \\
+$m$ & Số phương tiện vận tải (vehicles) \\
+$G$ & Số thế hệ trong Genetic Algorithm \\
+$P$ & Kích thước quần thể trong Genetic Algorithm \\
+depot & Kho hàng trung tâm \\
+fitness & Độ thích nghi trong thuật toán di truyền \\
+chromosome & Nhiễm sắc thể -- biểu diễn lời giải trong GA \\
+\end{tabular}
+}
+
+%========================================
+% MỞ ĐẦU
+%========================================
+\newpage
+\pagenumbering{arabic} 
+\pagestyle{fancy} 
+
+\chapter*{Mở đầu}
+\addcontentsline{toc}{chapter}{\vspace*{-8pt}  Mở đầu} 
+
+Trong bối cảnh nền kinh tế phát triển mạnh mẽ và thương mại điện tử bùng nổ, nhu cầu giao hàng ngày càng tăng cao. Các doanh nghiệp logistics, vận tải đối mặt với thách thức lớn: làm sao để giao hàng đến hàng trăm, hàng nghìn điểm một cách hiệu quả nhất về thời gian và chi phí.
+
+\textbf{Bài toán VRP (Vehicle Routing Problem)} -- bài toán định tuyến phương tiện -- là một trong những bài toán tối ưu hóa tổ hợp quan trọng nhất trong lĩnh vực logistics và vận tải. Bài toán thuộc lớp NP-complete, có nghĩa là không tồn tại thuật toán đa thức để giải chính xác trong thời gian hợp lý. Vì vậy, các thuật toán heuristic và metaheuristic được sử dụng để tìm lời giải gần tối ưu.
+
+Đồ án này tập trung nghiên cứu và triển khai các thuật toán giải quyết bài toán VRP, bao gồm:
+\begin{itemize}
+\item Thuật toán \textbf{Nearest Neighbor} (tham lam)
+\item Thuật toán \textbf{Genetic Algorithm} (tiến hóa)
+\item Thuật toán \textbf{Sweep} (phân bổ góc)
+\end{itemize}
+
+Nội dung đồ án được trình bày qua các chương:
+\begin{itemize}
+\item \textbf{Chương 1}: Giới thiệu bài toán VRP, phân tích độ phức tạp và các biến thể
+\item \textbf{Chương 2}: Các thuật toán giải quyết bài toán VRP
+\item \textbf{Chương 3}: Triển khai hệ thống -- kiến trúc, công cụ và API
+\item \textbf{Chương 4}: Kết luận và hướng phát triển
+\end{itemize}
+
+%========================================
+\chapter{Giới Thiệu Bài Toán VRP}
+%========================================
+
+\section{Định Nghĩa Bài Toán}
+
+\textbf{VRP (Vehicle Routing Problem)} là một trong những bài toán tối ưu hóa tổ hợp quan trọng nhất trong lĩnh vực vận tải, logistics và quản lý chuỗi cung ứng.
+
+\textbf{Đầu vào (Input):}
+\begin{itemize}
+    \item $n$ điểm giao hàng (khách hàng) với tọa độ và nhu cầu cụ thể
+    \item $m$ phương tiện vận tải (xe) với dung tích giới hạn
+    \item 1 kho hàng trung tâm (depot) là điểm xuất phát và kết thúc
+\end{itemize}
+
+\textbf{Đầu ra (Output):}
+\begin{itemize}
+    \item Tập các lộ trình tối ưu cho từng xe
+    \item Mỗi khách hàng được phục vụ đúng 1 lần
+    \item Tổng khoảng cách/tổng chi phí được tối thiểu hóa
+    \item Tuân thủ các ràng buộc về dung tích, thời gian
+\end{itemize}
+
+\section{Độ Phức Tạp Của Bài Toán}
+
+VRP thuộc lớp bài toán \textbf{NP-complete}. Bảng sau minh họa sự bùng nổ của không gian tìm kiếm:
+
+\begin{table}[h]
+\centering
+\caption{Số hoán vị và thời gian duyệt toàn bộ}
+\begin{tabular}{@{}ccc@{}}
+\toprule
+\textbf{Số điểm} & \textbf{Số hoán vị} & \textbf{Thời gian (1ms/hoán vị)} \\
+\midrule
+5 & 120 & 0.12 giây \\
+10 & $3.6 \times 10^6$ & 1 giờ \\
+15 & $1.3 \times 10^{12}$ & 41 năm \\
+20 & $2.4 \times 10^{18}$ & 77 triệu năm \\
+100 & $100!$ & Vượt quá tuổi vũ trụ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Kết luận:} Không thể giải tối ưu bằng brute force. Cần sử dụng các thuật toán heuristic và metaheuristic.
+
+\section{Các Biến Thể Của VRP}
+
+\begin{table}[h]
+\centering
+\caption{Các biến thể VRP phổ biến}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Tên} & \textbf{Đặc điểm} & \textbf{Ứng dụng} \\
+\midrule
+TSP & 1 xe, thăm tất cả điểm & Baseline, đơn giản nhất \\
+VRP cơ bản & Nhiều xe, 1 kho & Giao hàng thực tế \\
+CVRP & + Ràng buộc dung tích & Xe có giới hạn tải trọng \\
+VRPTW & + Khung giờ giao hàng & Giao hàng đúng giờ hẹn \\
+MDVRP & + Nhiều kho & Phân phối đa khu vực \\
+VRPPD & + Nhận và giao hàng & Logistics 2 chiều \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%========================================
+\chapter{Bài Toán Giải Quyết Vấn Đề Gì}
+%========================================
+
+\section{Vấn Đề Thực Tế}
+
+Trong logistics hiện đại, doanh nghiệp đối mặt với:
+\begin{enumerate}
+    \item \textbf{Chi phí nhiên liệu cao:} 30-40\% tổng chi phí vận hành
+    \item \textbf{Thời gian giao hàng không đồng đều:} Khách hàng không hài lòng
+    \item \textbf{Sử dụng phương tiện kém hiệu quả:} Xe chạy không đầy tải
+    \item \textbf{Khó khăn khi quy mô tăng:} 100+ điểm không thể lập kế hoạch thủ công
+\end{enumerate}
+
+\section{Mục Tiêu Giải Quyết}
+
+\begin{table}[h]
+\centering
+\caption{Mục tiêu và chỉ số đo lường}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Mục tiêu} & \textbf{Chỉ số} & \textbf{Kỳ vọng} \\
+\midrule
+Tối thiểu chi phí & Tổng km & Giảm 25-40\% \\
+Tối ưu thời gian & Thời gian hoàn thành & Rút ngắn 20-30\% \\
+Tối ưu nguồn lực & Số xe sử dụng & Giảm 10-20\% \\
+Đảm bảo chất lượng & \% đúng giờ & >95\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Lợi Ích Kinh Tế}
+
+\textbf{Ví dụ thực tế:} Công ty giao hàng với 50 xe, 1000 điểm giao/ngày
+
+\begin{itemize}
+    \item \textbf{Trước tối ưu:} 50 xe $\times$ 200 km = 10,000 km/ngày
+    \item \textbf{Sau tối ưu:} 45 xe $\times$ 160 km = 7,200 km/ngày
+    \item \textbf{Tiết kiệm:} 2,800 km $\times$ 365 ngày $\times$ 15,000 VND = \textbf{15.3 tỷ VND/năm}
+\end{itemize}
+
+%========================================
+\chapter{Các Thuật Toán Giải Quyết Bài Toán}
+%========================================
+
+\section{Thuật Toán Nearest Neighbor (Tham Lam)}
+
+\subsection{Ý Tưởng}
+
+Thuật toán tham lam đơn giản: tại mỗi bước, luôn chọn điểm chưa ghé thăm \textbf{gần nhất} từ vị trí hiện tại.
+
+\subsection{Pseudocode}
+
+\begin{algorithm}
+\caption{Nearest Neighbor Algorithm}
+\begin{algorithmic}[1]
+\REQUIRE depot, customers
+\ENSURE route, total\_distance
+\STATE current $\leftarrow$ depot
+\STATE unvisited $\leftarrow$ customers
+\STATE route $\leftarrow$ [depot]
+\STATE total\_distance $\leftarrow$ 0
+\WHILE{unvisited $\neq \emptyset$}
+    \STATE nearest $\leftarrow$ NULL
+    \STATE min\_dist $\leftarrow \infty$
+    \FOR{point $\in$ unvisited}
+        \STATE dist $\leftarrow$ haversine(current, point)
+        \IF{dist $<$ min\_dist}
+            \STATE min\_dist $\leftarrow$ dist
+            \STATE nearest $\leftarrow$ point
+        \ENDIF
+    \ENDFOR
+    \STATE route.ADD(nearest)
+    \STATE total\_distance $\leftarrow$ total\_distance + min\_dist
+    \STATE unvisited.REMOVE(nearest)
+    \STATE current $\leftarrow$ nearest
+\ENDWHILE
+\STATE route.ADD(depot)
+\STATE total\_distance $\leftarrow$ total\_distance + haversine(current, depot)
+\RETURN route, total\_distance
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Phân Tích Độ Phức Tạp}
+
+\begin{table}[h]
+\centering
+\caption{Phân tích Nearest Neighbor}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Tiêu chí} & \textbf{Giá trị} \\
+\midrule
+Time Complexity & $\bigO(n^2)$ \\
+Space Complexity & $\bigO(n)$ \\
+Chất lượng lời giải & 70-80\% so với tối ưu \\
+Thời gian thực thi & $<$ 100ms cho 100 điểm \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Ưu và Nhược Điểm}
+
+\textbf{Ưu điểm:}
+\begin{itemize}
+    \item Đơn giản, dễ hiểu và triển khai
+    \item Nhanh, phù hợp bài toán nhỏ
+    \item Không yêu cầu bộ nhớ lớn
+\end{itemize}
+
+\textbf{Nhược điểm:}
+\begin{itemize}
+    \item Dễ rơi vào cực tiểu cục bộ (local optimum)
+    \item Không tính đến cấu trúc tổng thể của đồ thị
+    \item Quyết định đầu có thể dẫn đến đường đi tệ ở cuối
+\end{itemize}
+
+%----------------------------------------
+\section{Thuật Toán Genetic Algorithm (GA)}
+%----------------------------------------
+
+\subsection{Ý Tưởng}
+
+Mô phỏng quá trình \textbf{tiến hóa tự nhiên}: các lộ trình (individuals) cạnh tranh, lai ghép, đột biến qua nhiều thế hệ.
+
+\subsection{Các Thành Phần Chính}
+
+\begin{table}[h]
+\centering
+\caption{Thành phần Genetic Algorithm}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Thành phần} & \textbf{Mô tả} & \textbf{Trong VRP} \\
+\midrule
+Chromosome & Một lời giải & Danh sách điểm theo thứ tự \\
+Population & Tập lời giải & 50-200 lộ trình \\
+Fitness & Chất lượng & $1 / \text{tổng khoảng cách}$ \\
+Selection & Chọn lọc & Tournament selection \\
+Crossover & Lai ghép & Order Crossover (OX) \\
+Mutation & Đột biến & Hoán đổi 2 điểm \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Pseudocode}
+
+\begin{algorithm}
+\caption{Genetic Algorithm for VRP}
+\begin{algorithmic}[1]
+\REQUIRE customers, population\_size, generations, mutation\_rate
+\ENSURE best\_solution
+\STATE population $\leftarrow$ []
+\FOR{$i = 1$ \TO population\_size}
+    \STATE route $\leftarrow$ RANDOM\_SHUFFLE(customers)
+    \STATE population.ADD([depot] + route + [depot])
+\ENDFOR
+\STATE best\_solution $\leftarrow$ NULL
+\STATE best\_fitness $\leftarrow$ 0
+\FOR{$gen = 1$ \TO generations}
+    \STATE fitness\_scores $\leftarrow$ []
+    \FOR{individual $\in$ population}
+        \STATE distance $\leftarrow$ calculate\_route\_distance(individual)
+        \STATE fitness $\leftarrow 1.0 / \text{distance}$
+        \IF{fitness $>$ best\_fitness}
+            \STATE best\_fitness $\leftarrow$ fitness
+            \STATE best\_solution $\leftarrow$ individual
+        \ENDIF
+        \STATE fitness\_scores.ADD(fitness)
+    \ENDFOR
+    \STATE parents $\leftarrow$ []
+    \FOR{$i = 1$ \TO population\_size$/2$}
+        \STATE tournament $\leftarrow$ RANDOM\_SAMPLE(population, 3)
+        \STATE winner $\leftarrow$ MAX(tournament, key=fitness)
+        \STATE parents.ADD(winner)
+    \ENDFOR
+    \STATE offspring $\leftarrow$ []
+    \WHILE{offspring.SIZE $<$ population\_size}
+        \STATE p1 $\leftarrow$ RANDOM\_CHOICE(parents)
+        \STATE p2 $\leftarrow$ RANDOM\_CHOICE(parents)
+        \STATE child $\leftarrow$ ORDER\_CROSSOVER(p1, p2)
+        \STATE offspring.ADD(child)
+    \ENDWHILE
+    \FOR{child $\in$ offspring}
+        \IF{RANDOM() $<$ mutation\_rate}
+            \STATE SWAP\_MUTATION(child)
+        \ENDIF
+    \ENDFOR
+    \STATE population $\leftarrow$ offspring
+\ENDFOR
+\RETURN best\_solution
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Phân Tích Độ Phức Tạp}
+
+\begin{table}[h]
+\centering
+\caption{Phân tích Genetic Algorithm}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Tiêu chí} & \textbf{Giá trị} \\
+\midrule
+Time Complexity & $\bigO(G \times P \times n^2)$ \\
+Space Complexity & $\bigO(P \times n)$ \\
+Chất lượng lời giải & 85-95\% so với tối ưu \\
+Thời gian thực thi & 3-10s cho 100 điểm \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textit{với $G$ = generations, $P$ = population\_size, $n$ = số điểm}
+
+\subsection{Cấu Hình Tối Ưu}
+
+\begin{table}[h]
+\centering
+\caption{Tham số khuyến nghị cho GA}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Tham số} & \textbf{Giá trị} & \textbf{Ý nghĩa} \\
+\midrule
+population\_size & 50-100 & Quần thể lớn = tìm kiếm toàn diện \\
+generations & 300-500 & Thường hội tụ sau 300 thế hệ \\
+mutation\_rate & 0.05-0.15 & Cân bằng đa dạng và ổn định \\
+elite\_size & 5-10 & Bảo tồn cá thể tốt nhất \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%----------------------------------------
+\section{Thuật Toán Sweep (Multi-Vehicle)}
+%----------------------------------------
+
+\subsection{Ý Tưởng}
+
+Phân bổ khách hàng cho nhiều xe dựa trên \textbf{góc cực} (polar angle) từ kho:
+
+\begin{enumerate}
+    \item Tính góc của mỗi khách hàng so với kho (0° → 360°)
+    \item Sắp xếp khách hàng theo góc tăng dần
+    \item "Quét" vòng tròn, gán khách hàng cho xe hiện tại
+    \item Khi đầy capacity → chuyển sang xe tiếp theo
+    \item Tối ưu mỗi route bằng 2-opt
+\end{enumerate}
+
+\subsection{Phân Tích}
+
+\begin{table}[h]
+\centering
+\caption{Đánh giá thuật toán Sweep}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Tiêu chí} & \textbf{Giá trị} \\
+\midrule
+Time Complexity & $\bigO(n \log n)$ (chủ yếu sắp xếp) \\
+Chất lượng & Tốt cho phân bổ địa lý \\
+Điểm mạnh & Nhanh, tự nhiên (góc ≈ khoảng cách địa lý) \\
+Điểm yếu & Không tốt khi cùng góc nhưng xa depot \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%----------------------------------------
+\section{So Sánh Các Thuật Toán}
+%----------------------------------------
+
+\begin{table}[h]
+\centering
+\caption{So sánh tổng hợp các thuật toán}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Thuật toán} & \textbf{Tốc độ} & \textbf{Chất lượng} & \textbf{Phù hợp khi} \\
+\midrule
+Nearest Neighbor & $\bigstar\bigstar\bigstar$ (0.05s) & 70-80\% & Bài toán nhỏ, cần nhanh \\
+Sweep & $\bigstar\bigstar\bigstar$ (0.1s) & 75-85\% & Nhiều xe, phân bố địa lý \\
+Genetic Algorithm & $\bigstar\bigstar$ (3-10s) & 85-95\% & Cần tối ưu nhất \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%========================================
+\chapter{Triển Khai Hệ Thống}
+%========================================
+
+\section{Sơ Đồ Class Tổng Quan (PlantUML)}
+
+Sơ đồ class hệ thống được mô tả bằng PlantUML như sau. Sinh viên tự gen tài liệu từ code PlantUML này.
+
+\begin{lstlisting}[language=plantuml, caption=Sơ đồ Class VRP System (PlantUML)]
+@startuml VRP Class Diagram
+
+skinparam classAttributeIconSize 0
+skinparam class {
+    BackgroundColor White
+    ArrowColor Black
+    BorderColor Black
+}
+
+' Core Domain Classes
+class Customer {
+    + id: str
+    + lat: float
+    + lng: float
+    + demand: float
+    + service_time: int
+    + priority: int
+    + time_window_start: Optional[Time]
+    + time_window_end: Optional[Time]
+}
+
+class Vehicle {
+    + id: str
+    + capacity: float
+    + depot_lat: float
+    + depot_lng: float
+    + cost_per_km: float
+    + cost_per_hour: float
+    + max_shift_hours: int
+}
+
+class Route {
+    + vehicle_id: str
+    + customer_ids: List[str]
+    + depot_lat: float
+    + depot_lng: float
+    + total_distance_km: float
+    + total_demand: float
+    + sequence: int
+    + calculate_distance(): float
+}
+
+class VRPSolution {
+    + routes: List<Route>
+    + total_distance_km: float
+    + total_vehicles_used: int
+    + unassigned_customers: List<str>
+    + validate(): ValidationResult
+}
+
+' Solver Interface and Implementations
+interface VRPSolver {
+    + solve(customers, vehicles): VRPSolution
+}
+
+class SweepCVRPSolver {
+    + solve(customers, vehicles): VRPSolution
+    - sort_by_polar_angle(): List<Customer>
+    - assign_to_vehicles(): Dict
+    - optimize_with_2opt(route): Route
+}
+
+class GreedyCVRPSolver {
+    + solve(customers, vehicles): VRPSolution
+    - find_nearest_available_vehicle(): Vehicle
+}
+
+class GeneticAlgorithmVRP {
+    + solve(customers, vehicles): VRPSolution
+    - create_initial_population(): List<VRPChromosome>
+    - calculate_fitness(chromosome): float
+    - selection(population): List<VRPChromosome>
+    - crossover(p1, p2): VRPChromosome
+    - mutate(chromosome): VRPChromosome
+}
+
+class VRPChromosome {
+    + routes: Dict<vehicle_id, List<customer_id>>
+    + copy(): VRPChromosome
+    + get_all_customers(): Set<str>
+    + to_vrp_solution(): VRPSolution
+}
+
+' Distance Calculation
+class DistanceCalculator {
+    + haversine(lat1, lng1, lat2, lng2): float
+    + euclidean(p1, p2): float
+    + build_distance_matrix(points): Matrix
+}
+
+' Service Layer
+class OptimizationService {
+    + run_optimizer(config): Job
+    + get_job_status(job_id): JobStatus
+    + cancel_job(job_id): bool
+    - materialize_job(job): OptimizationResult
+}
+
+' Database Models
+class Location <<SQLAlchemy>> {
+    + id: str
+    + name: str
+    + lat: float
+    + lng: float
+    + demand_kg: float
+    + time_window_start: datetime
+    + time_window_end: datetime
+}
+
+class OptimizationJob <<SQLAlchemy>> {
+    + id: str
+    + status: JobStatus
+    + solver_algorithm: str
+    + vehicle_ids: List<str>
+    + location_ids: List<str>
+    + created_at: datetime
+    + completed_at: datetime
+    + result: JSON
+}
+
+' Relationships
+VRPSolver <|.. SweepCVRPSolver
+VRPSolver <|.. GreedyCVRPSolver
+VRPSolver <|.. GeneticAlgorithmVRP
+
+VRPSolution "1" *-- "*" Route : contains
+Route "1" --> "*" Customer : serves
+Route "*" --> "1" Vehicle : assigned_to
+
+GeneticAlgorithmVRP ..> VRPChromosome : uses
+VRPChromosome ..> VRPSolution : converts_to
+
+OptimizationService ..> VRPSolver : uses
+OptimizationService ..> OptimizationJob : manages
+OptimizationJob ..> Location : references
+OptimizationJob ..> Vehicle : references
+
+DistanceCalculator ..> Customer : calculates_between
+
+@enduml
+\end{lstlisting}
+
+\textbf{Ghi chú:} Sinh viên sử dụng công cụ PlantUML (\url{http://www.plantuml.com/plantuml/}) để gen sơ đồ class từ code trên.
+
+%----------------------------------------
+\section{Sơ Đồ Sequence (Luồng Chính - PlantUML)}
+%----------------------------------------
+
+Sơ đồ sequence cho luồng xử lý chính của hệ thống được mô tả bằng PlantUML. Sinh viên tự gen tài liệu từ code PlantUML này.
+
+\begin{lstlisting}[language=plantuml, caption=Sơ đồ Sequence Luồng Tối Ưu Hóa (PlantUML)]
+@startuml VRP Sequence Diagram - Main Flow
+
+skinparam sequenceArrowThickness 2
+skinparam participantPadding 20
+
+actor User
+participant "Frontend\n(React)" as Frontend
+participant "API\n(FastAPI)" as API
+participant "Optimization\nService" as Service
+participant "VRP Solver\n(GA/Sweep)" as Solver
+participant "Database\n(PostgreSQL)" as DB
+
+User -> Frontend: 1. Upload danh sách điểm giao
+activate Frontend
+
+Frontend -> API: 2. POST /api/optimize/run
+activate API
+
+API -> API: 3. Validate input\n(vehicle_ids, location_ids)
+
+API -> Service: 4. run_optimizer(config)
+activate Service
+
+Service -> DB: 5. Tạo OptimizationJob\n(status=CALCULATING)
+activate DB
+DB --> Service: Trả về job_id
+
+deactivate DB
+
+Service --> API: Trả về job_id (async)
+API --> Frontend: 202 Accepted
+Frontend --> User: Hiển thị "Đang tính toán..."
+
+deactivate API
+deactivate Frontend
+
+' Background processing
+Service -> DB: 6. Query vehicles, locations
+activate DB
+DB --> Service: Vehicle[], Location[]
+deactivate DB
+
+Service -> Service: 7. Build Customer[], Vehicle[]
+
+Service -> Solver: 8. solve(customers, vehicles)
+activate Solver
+
+Solver -> Solver: 8a. Tạo initial population
+Solver -> Solver: 8b. Loop generations
+Solver -> Solver: 8c. Calculate fitness
+Solver -> Solver: 8d. Selection, Crossover, Mutation
+Solver --> Service: Trả về VRPSolution
+
+deactivate Solver
+
+Service -> Service: 9. Tạo Route objects\ntừ VRPSolution
+
+Service -> DB: 10. Lưu routes, cập nhật job\n(status=COMPLETED)
+activate DB
+DB --> Service: Success
+deactivate DB
+
+deactivate Service
+
+' Polling for result
+User -> Frontend: 11. Kiểm tra kết quả
+activate Frontend
+
+Frontend -> API: 12. GET /api/optimize/jobs/{id}
+activate API
+
+API -> DB: 13. Query job status
+activate DB
+DB --> API: Job status + result
+
+deactivate DB
+
+API --> Frontend: 14. Trả về routes + metrics
+Frontend --> User: 15. Hiển thị bản đồ + thống kê
+
+deactivate API
+deactivate Frontend
+
+@enduml
+\end{lstlisting}
+
+\textbf{Ghi chú:} Sinh viên sử dụng công cụ PlantUML (\url{http://www.plantuml.com/plantuml/}) để gen sơ đồ sequence từ code trên.
+
+\textbf{Đặc điểm quan trọng của luồng xử lý:}
+\begin{itemize}
+    \item Bước 5 (Tạo job) đến bước 10 (Lưu kết quả) chạy \textbf{asynchronously}
+    \item API trả về job\_id ngay lập tức, không block người dùng
+    \item Frontend sử dụng polling để kiểm tra trạng thái job
+    \item Bước 8d chạy trong vòng lặp generations (300-500 lần lặp)
+\end{itemize}
+
+%----------------------------------------
+\section{Công Cụ Được Sử Dụng}
+%----------------------------------------
+
+\subsection{Stack Công Nghệ Tổng Quan}
+
+\begin{verbatim}
+┌─────────────────────────────────────────────────────────────┐
+│                        FRONTEND                              │
+│  React + TypeScript + Tailwind CSS + Vite                   │
+│  Leaflet / Mapbox (Bản đồ tương tác)                        │
+├─────────────────────────────────────────────────────────────┤
+│                        BACKEND                               │
+│  Python 3.11 + FastAPI (REST API, async)                    │
+│  Pydantic (Data validation)                                  │
+│  Uvicorn (ASGI server)                                       │
+├─────────────────────────────────────────────────────────────┤
+│                    OPTIMIZATION ENGINE                      │
+│  Custom Python Algorithms                                   │
+│  ├── Nearest Neighbor (Greedy)                             │
+│  ├── Sweep Algorithm                                       │
+│  ├── Genetic Algorithm (Multi-vehicle VRP)              │
+│  └── 2-opt Local Search                                    │
+├─────────────────────────────────────────────────────────────┤
+│                       DATABASE                               │
+│  PostgreSQL 15 + SQLAlchemy (ORM)                          │
+│  Alembic (Migrations)                                        │
+├─────────────────────────────────────────────────────────────┤
+│                    EXTERNAL APIs                            │
+│  Nominatim OSM (Geocoding)                                  │
+└─────────────────────────────────────────────────────────────┘
+\end{verbatim}
+
+\subsection{Chi Tiết Công Cụ}
+
+\begin{table}[h]
+\centering
+\caption{Danh sách công cụ theo layer}
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{Layer} & \textbf{Công cụ} & \textbf{Phiên bản} & \textbf{Mục đích} \\
+\midrule
+\multirow{4}{*}{Frontend} 
+    & React & 18.x & UI components \\
+    & TypeScript & 5.x & Type safety \\
+    & Tailwind CSS & 3.x & Styling \\
+    & Lucide React & Latest & Icons \\
+\midrule
+\multirow{4}{*}{Backend} 
+    & Python & 3.11+ & Core language \\
+    & FastAPI & 0.104+ & REST API \\
+    & Pydantic & 2.x & Validation \\
+    & Uvicorn & Latest & ASGI server \\
+\midrule
+\multirow{3}{*}{Database} 
+    & PostgreSQL & 15.x & Data storage \\
+    & SQLAlchemy & 2.x & ORM \\
+    & Alembic & Latest & Migrations \\
+\midrule
+\multirow{2}{*}{Algorithms} 
+    & NumPy & Latest & Numerical ops \\
+    & Custom Python & - & VRP solvers \\
+\midrule
+\multirow{2}{*}{DevOps} 
+    & Docker & Latest & Container \\
+    & Git & Latest & Version control \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%----------------------------------------
+\section{Các API Bên Thứ 3 Sử Dụng}
+%----------------------------------------
+
+\subsection{Nominatim OpenStreetMap (Geocoding)}
+
+\textbf{Mục đích:} Chuyển đổi địa chỉ văn bản thành tọa độ GPS (lat, lng)
+
+\textbf{Endpoint:}
+\begin{lstlisting}[breaklines]
+GET https://nominatim.openstreetmap.org/search?q={address}&format=json&limit=5
+\end{lstlisting}
+
+\textbf{Request Parameters:}
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Parameter} & \textbf{Type} & \textbf{Mô tả} \\
+\midrule
+q & string & Địa chỉ cần tìm kiếm \\
+format & string & Định dạng trả về (json) \\
+limit & int & Số kết quả tối đa \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Response Example:}
+\begin{lstlisting}[language=json]
+[
+  {
+    "place_id": 123456789,
+    "lat": "10.8231",
+    "lon": "106.6297",
+    "display_name": "123 Nguyen Van A, Q1, TP.HCM",
+    "type": "house"
+  }
+]
+\end{lstlisting}
+
+\textbf{Giới hạn:}
+\begin{itemize}
+    \item Rate limit: 1 request/second (miễn phí)
+    \item Yêu cầu User-Agent header
+    \item Không dùng cho production scale lớn
+\end{itemize}
+
+\textbf{Triển khai trong hệ thống:}
+\begin{lstlisting}[language=Python]
+async def geocode_address(address: str) -> Optional[Location]:
+    url = "https://nominatim.openstreetmap.org/search"
+    params = {"q": address, "format": "json", "limit": 1}
+    
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, params=params) as response:
+            data = await response.json()
+            if data:
+                return Location(
+                    lat=float(data[0]["lat"]),
+                    lng=float(data[0]["lon"]),
+                    address=data[0]["display_name"]
+                )
+    return None
+\end{lstlisting}
+
+\subsection{API Tùy Chọn Khác}
+
+\begin{table}[h]
+\centering
+\caption{API bên thứ 3 tùy chọn}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{API} & \textbf{Mục đích} & \textbf{Trạng thái} \\
+\midrule
+Google Maps Distance Matrix & Khoảng cách thực tế & Tùy chọn (cần API key) \\
+OpenRouteService & Routing, isochrones & Tùy chọn (free tier) \\
+GraphHopper & OSM-based routing & Self-hosted option \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Lưu ý:} Hệ thống hiện tại sử dụng \textbf{Haversine distance} để tính khoảng cách chim bay, đủ chính xác cho mục đích tối ưu và không phụ thuộc API bên thứ 3 cho core algorithm.
+
+%========================================
+\chapter{Kết Luận}
+%========================================
+
+\section{Đóng Góp Chính}
+
+\begin{enumerate}
+    \item \textbf{Thuật toán VRP đa phương tiện}: Triển khai Genetic Algorithm cho bài toán VRP thực sự (không phải TSP đơn giản)
+    \item \textbf{Kiến trúc module hóa}: Dễ dàng thay thế, mở rộng thuật toán
+    \item \textbf{Hệ thống async}: Job-based optimization, không block người dùng
+    \item \textbf{Giao diện trực quan}: Bản đồ tương tác, thống kê real-time
+\end{enumerate}
+
+\section{Hướng Phát Triển}
+
+\begin{table}[h]
+\centering
+\caption{Roadmap phát triển}
+\begin{tabular}{@{}cll@{}}
+\toprule
+\textbf{STT} & \textbf{Hướng phát triển} & \textbf{Mô tả} \\
+\midrule
+1 & VRPTW & Thêm ràng buộc khung giờ giao hàng \\
+2 & Dynamic VRP & Xử lý đơn hàng real-time \\
+3 & ML Prediction & Dự đoán thời gian giao \\
+4 & Hybrid Solver & Constraint Programming + GA \\
+5 & Mobile App & Ứng dụng cho tài xế \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%========================================
+% BIBLIOGRAPHY
+%========================================
+\newpage
+\begin{thebibliography}{9}
+
+\bibitem{dantzig}
+Dantzig, G. B., \& Ramser, J. H. (1959). 
+The Truck Dispatching Problem. 
+\textit{Management Science}, 6(1), 80-91.
+
+\bibitem{toth}
+Toth, P., \& Vigo, D. (2014). 
+Vehicle Routing: Problems, Methods, and Applications. 
+SIAM.
+
+\bibitem{eiben}
+Eiben, A. E., \& Smith, J. E. (2015). 
+Introduction to Evolutionary Computing. 
+Springer.
+
+\bibitem{osrm}
+OpenStreetMap Wiki. Nominatim.
+\url{https://wiki.openstreetmap.org/wiki/Nominatim}
+
+\bibitem{fastapi}
+FastAPI Documentation.
+\url{https://fastapi.tiangolo.com/}
+
+\end{thebibliography}
+
+\end{document}

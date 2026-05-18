@@ -49,6 +49,8 @@ def update_location(db: Session, location_id: str, payload: LocationUpdate) -> L
         coords = updates.pop("coordinates")
         updates["lat"] = coords["lat"]
         updates["lng"] = coords["lng"]
+    if "address_string" in updates:
+        updates["address"] = updates.pop("address_string")
     return LocationRepository(db).update(location, **updates)
 
 

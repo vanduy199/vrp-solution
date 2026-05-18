@@ -33,7 +33,7 @@ def create_job(db: Session, payload: OptimizeRunRequest) -> OptimizationJob:
         status=JobStatus.CALCULATING.value,
         vehicle_ids=payload.vehicles,
         location_ids=payload.locations,
-        constraints=payload.constraints,
+        constraints=payload.constraints.model_dump(),
         estimated_time_seconds=estimated,
         ready_at=now + timedelta(seconds=estimated),
     )
@@ -135,7 +135,7 @@ def materialize_job(db: Session, job: OptimizationJob) -> OptimizationJob:
     if not vehicle_ids:
         return _fail("No vehicles provided")
 
-    vehicles = db.query(Vehicle).filter(Vehicle.id.in_(vehicle_ids)).all()
+    vehicles = db.query(VehicleModel).filter(VehicleModel.id.in_(vehicle_ids)).all()
     vehicle_map = {cast(str, v.id): v for v in vehicles}
     missing_v = [vid for vid in vehicle_ids if vid not in vehicle_map]
     if missing_v:

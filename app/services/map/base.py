@@ -11,6 +11,7 @@ class PlaceSuggestion:
     address: str
     lat: float | None = None
     lng: float | None = None
+    gmap_url: str | None = None
 
 
 @dataclass
@@ -20,6 +21,7 @@ class PlaceDetail:
     address: str
     lat: float = 0.0
     lng: float = 0.0
+    gmap_url: str | None = None
     raw: dict = field(default_factory=dict)
 
 

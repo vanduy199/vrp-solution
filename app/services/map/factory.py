@@ -15,11 +15,15 @@ def get_map_provider() -> MapProvider:
         from app.services.map.locationiq_provider import LocationIQProvider
         return LocationIQProvider(api_key=settings.LOCATIONIQ_API_KEY)
 
+    if provider == "serper":
+        from app.services.map.serper_provider import SerperProvider
+        return SerperProvider(api_key=settings.SERPER_API_KEY)
+
     # if provider == "goong":
     #     from app.services.map.goong_provider import GoongProvider
     #     return GoongProvider(api_key=settings.GOONG_API_KEY)
 
     raise ValueError(
         f"Unknown MAP_PROVIDER '{settings.MAP_PROVIDER}'. "
-        f"Supported: locationiq"
+        f"Supported: locationiq, serper"
     )

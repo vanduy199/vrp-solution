@@ -22,6 +22,7 @@ async def autocomplete(
             "address": s.address,
             "lat": s.lat,
             "lng": s.lng,
+            "gmap_url": s.gmap_url,
         }
         for s in suggestions
     ]
@@ -40,6 +41,7 @@ async def place_detail(place_id: str):
         "address": detail.address,
         "lat": detail.lat,
         "lng": detail.lng,
+        "gmap_url": detail.gmap_url,
     }
 
 
